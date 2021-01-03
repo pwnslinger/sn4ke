@@ -4,7 +4,7 @@
 - Mutate.cpp: srciror mutation pass adjusted for llvm version 10.0.1
 
 ## Steps to get the setup:
-1. install llvm version 10.0.1
+1. install llvm and clang version 10.0.1
 2. add the adjusted mutation pass
 3. install revng through their orchestra repository
 4. install srciror
