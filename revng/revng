@@ -1,0 +1,721 @@
+#!/usr/bin/env python3
+
+import argparse
+import glob
+import os
+import re
+import signal
+import subprocess
+import sys
+import shlex
+
+from binascii import hexlify
+from ctypes.util import find_library
+from functools import reduce
+from itertools import chain
+try:
+    from shutil import which
+except ImportError:
+    from backports.shutil_which import which
+
+from elftools.elf.dynamic import DynamicSegment
+from elftools.elf.elffile import ELFFile
+
+real_argv0 = os.environ.get("REAL_ARGV0", sys.argv[0])
+
+def shlex_join(split_command):
+  return ' '.join(shlex.quote(arg) for arg in split_command)
+
+def run(command):
+  if is_executable(command[0]):
+    command = wrap(command)
+  signal.signal(signal.SIGINT, signal.SIG_IGN)
+  p = subprocess.Popen(command, preexec_fn=lambda: signal.signal(signal.SIGINT, signal.SIG_DFL))
+  if p.wait() != 0:
+      log_error("The following command exited with {}:\n{}".format(p.returncode, shlex_join(command)))
+      sys.exit(p.returncode)
+
+def is_executable(path):
+  with open(path, "rb") as program:
+    return program.read(4) == b"\x7fELF"
+
+def is_dynamic(path):
+  with open(path, "rb") as input_file:
+    return len([segment
+                for segment
+                in ELFFile(input_file).iter_segments()
+                if segment.header.p_type == "PT_DYNAMIC"]) != 0
+
+
+def interleave(base, repeat):
+  return list(sum(zip([repeat] * len(base), base), ()))
+
+# Use in case different version of pyelftools might give str or bytes
+def to_string(obj):
+  if type(obj) is str:
+    return obj
+  elif type(obj) is bytes:
+    return obj.decode("utf-8")
+
+def get_elf_needed(path):
+  with open(path, "rb") as elf_file:
+    segments = [segment
+                for segment
+                in ELFFile(elf_file).iter_segments()
+                if type(segment) is DynamicSegment]
+
+    if len(segments) == 1:
+      needed = [to_string(tag.needed)
+                for tag
+                in segments[0].iter_tags()
+                if tag.entry.d_tag == "DT_NEEDED"]
+
+      runpath = [tag.runpath
+                 for tag
+                 in segments[0].iter_tags()
+                 if tag.entry.d_tag == "DT_RUNPATH"]
+
+      assert len(runpath) < 2
+
+      if not runpath:
+        return needed
+      else:
+        runpaths = [path.replace("$ORIGIN",
+                                 os.path.dirname(path))
+                    for path
+                    in runpath[0].split(":")]
+        absolute_needed = []
+        for lib in needed:
+          found = False
+          for runpath in runpaths:
+            full_path = os.path.join(runpath, lib)
+            if os.path.isfile(full_path):
+              absolute_needed.append(full_path)
+              found = True
+              break
+
+          if not found:
+            absolute_needed.append(lib)
+
+        return absolute_needed
+
+    else:
+      return []
+
+def log_error(msg):
+  sys.stderr.write(msg + "\n")
+
+def get_command(command):
+  global search_path
+  path = which(command, path=search_path)
+  if not path:
+    log_error("""Couldn't find "{}" in "{}".""".format(command, search_path))
+    assert False
+  return os.path.abspath(path)
+
+def build_opt_args(args):
+  script_path = os.path.dirname(os.path.realpath(__file__))
+
+  analyses_path = None
+  analyses_build_path = os.path.join(script_path, "analyses")
+  analyses_install_path = os.path.join(script_path,
+                                       "..",
+                                       "lib",
+                                       "revng",
+                                       "analyses")
+  if os.path.isdir(analyses_build_path):
+    analyses_path = analyses_build_path
+  elif os.path.isdir(analyses_install_path):
+    analyses_path = analyses_install_path
+  else:
+    log_error("Couldn't find a valid path containing the analyses libraries")
+    assert False
+
+  # Enumerate all the libraries containing analyses
+  analysis_libraries = glob.glob(os.path.join(analyses_path, "*.so"))
+
+  # Identify all the libraries that are dependencies of other libraries, i.e.,
+  # non-roots in the dependencies tree. Note that circular dependencies are not
+  # allowed.
+  provided = set(chain.from_iterable([get_elf_needed(path)
+                                      for path
+                                      in analysis_libraries]))
+
+  # Full list of library names
+  all = set([os.path.basename(path) for path in analysis_libraries])
+
+  # Path to libraries representing the roots in the dependency tree
+  roots = [os.path.join(analyses_path, name) for name in all - provided]
+
+  prefix = []
+  libasan = [name
+             for name
+             in provided
+             if ("libasan." in name
+                 or "libclang_rt.asan" in name)]
+  if libasan:
+    original_asan_options = os.environ.get("ASAN_OPTIONS", "")
+    if original_asan_options:
+        asan_options = dict([option.split("=")
+                             for option
+                             in original_asan_options.split(":")])
+    else:
+        asan_options = dict()
+    asan_options["abort_on_error"] = "1"
+    new_asan_options = ":".join(["=".join(option)
+                                 for option
+                                 in asan_options.items()])
+
+    # Use `sh` instead of `env` since `env` sometimes is not a real executable
+    # but a shebang script spawning /usr/bin/coreutils, which makes gdb unhappy
+    prefix = [get_command("sh"),
+              "-c",
+              'LD_PRELOAD={} ASAN_OPTIONS={} '
+              'exec "$0" "$@"'.format(libasan[0], new_asan_options)]
+
+  return (prefix + [get_command("opt")]
+          + interleave(roots, "-load")
+          + args)
+
+def split_dash_dash(args):
+  if not args:
+    return [], []
+
+  extra_args = []
+  while (len(args) != 0) and (args[0] != "--"):
+    extra_args.append(args[0])
+    del args[0]
+
+  # Drop the delimiter
+  if len(args) != 0:
+    del args[0]
+
+  return list(extra_args), args
+
+def get_architecture(path):
+  with open(path, "rb") as file:
+    file.seek(5)
+    arch_id = hexlify(file.read(1))
+    file.seek(18)
+    arch_id += hexlify(file.read(2))
+  arch_id = arch_id.decode("utf-8")
+
+  if arch_id == "012800":
+    return "arm"
+  elif arch_id == "01b700":
+    return "aarch64"
+  elif arch_id == "010800":
+    return "mipsel"
+  elif arch_id == "020008":
+    return "mips"
+  elif arch_id == "013e00":
+    return "x86_64"
+  elif arch_id == "010300":
+    return "i386"
+  elif arch_id == "020016":
+    return "s390x"
+  elif arch_id == "01b700":
+    return "aarch64"
+  else:
+    log_error("Unknown architecture ID: {}".format(arch_id))
+    assert False
+
+def find_file(name, paths):
+  for path in paths:
+    path = os.path.join(path, name)
+    if os.path.isfile(path):
+      return path
+
+  log_error("Can't find the following file: {}".format(name))
+  assert False
+
+def get_stderr(args):
+  with subprocess.Popen(args, stderr=subprocess.PIPE) as process:
+    return process.stderr.read()
+
+def build_linking_options(li_csv_path, need_csv_path):
+  result = []
+
+  # Force maximum page size
+  page_size = 4096
+  result.append("-Wl,-z,max-page-size={}".format(page_size))
+
+  # Produce semgment loading options
+  min = 0
+  max = 0
+  with open(li_csv_path, "r") as li_csv_file:
+    # Consume CSV header
+    li_csv_file.readline()
+
+    for segment in li_csv_file:
+      name, start, end = segment.split(",")
+      start, end = int(start, 16), int(end, 16)
+
+      # Record max and min
+      if end > max:
+        max = end
+
+      if (min == 0) or start < min:
+        min = start
+
+      # Force section address
+      result.append("-Wl,--section-start={}={}".format(name, hex(start)))
+
+  # Force ld.bfd
+  result.append("-fuse-ld=bfd")
+
+  # Force a page before the lowest original address for the ELF header
+  result.append("-Wl,--section-start=.elfheaderhelper={}".format(hex(min - 1)))
+
+  # Force text to start on the page after all the original program segments
+  text_address = page_size * int((max + page_size - 1) / page_size)
+  result.append("-Wl,-Ttext-segment={}".format(hex(text_address)))
+
+  # Link required dynamic libraries
+  result.append("-Wl,--no-as-needed")
+
+  with open(need_csv_path, "r") as need_csv_file:
+    for library in need_csv_file:
+      library = library.strip()
+      if "/" in library:
+        library = library[library.rindex("/") + 1:]
+
+      match = re.match("^lib(.*).so(\.[0-9]+)*$", library)
+      if match:
+        library = "-l" + match.group(1)
+      else:
+        library = "-l:" + library
+
+      result.append(library)
+
+  result.append("-Wl,--as-needed")
+
+  return result
+
+def wrap(args):
+  global command_prefix
+  args = command_prefix + args
+
+  global log_commands
+  if log_commands:
+    cwd = os.getcwd().rstrip("/")
+    if args[0].startswith(cwd):
+      program_path = "." + args[0][len(cwd):]
+    else:
+      program_path = args[0]
+    sys.stderr.write("{}\n\n".format(" \\\n  ".join([program_path] + args[1:])))
+
+  return args
+
+def run_translate(args):
+  parser = argparse.ArgumentParser(description="The rev.ng translator.",
+                                   prog=real_argv0 + " translate")
+  parser.add_argument("-O0", action="store_true", help="Do no optimize.")
+  parser.add_argument("-O1", action="store_true", help="Use llc -O2.")
+  parser.add_argument("-O2",
+                      action="store_true",
+                      help="Use llc -O2 and opt -O2.")
+  parser.add_argument("--trace",
+                      action="store_true",
+                      help="Use the tracing version of support.ll.")
+  parser.add_argument("-s",
+                      "--skip",
+                      action="store_true",
+                      help="Do not invoke revng-lift.")
+  parser.add_argument("-i",
+                      "--isolate",
+                      action="store_true",
+                      help="Enable function isolation.")
+  parser.add_argument("--base", help="Load address to employ in lifting.")
+  parser.add_argument("-o", "--output", metavar="OUTPUT", help="Output path.")
+  parser.add_argument("-l", "--ll", metavar="LLOUT", help="The output ll.") #pk
+  parser.add_argument("input", metavar="INPUT", help="The input binary.")
+
+  # Strip away arguments -- so we can forward them to revng-lift
+  args, extra_args = split_dash_dash(args)
+
+  # Parse the arguments
+  args = parser.parse_args(args)
+
+  # Ensure there's an input file
+  if not args.input:
+    log_error("Input file not provided")
+    return -1
+
+  # Ensure there's an output file
+  if not args.ll:
+    log_error("Lifted output file not provided")
+    return -1
+
+  # Register optimization level
+  optimization_level = 0
+  if args.O1:
+    optimization_level = 1
+  elif args.O2:
+    optimization_level = 2
+
+  input = args.input
+  # pk executable = args.output if args.output else "{}.translated".format(input)
+  executable = args.output if args.output else "{}.translated".format(args.ll[:-3]) # pk
+  output = "{}.ll".format(executable)
+  # need_csv_path = "{}.need.csv".format(output)
+  # li_csv_path = "{}.li.csv".format(output)
+  need_csv_path = "{}.need.csv".format(input+"_lifted.ll")
+  li_csv_path = "{}.li.csv".format(input+"_lifted.ll")
+
+  # Find a compiler (used for linking)
+  compiler = get_command(os.environ.get("CXX", "c++"))
+
+  # Extracted the architecture name
+ #pk architecture = get_architecture(input)
+  architecture = "x86_64"
+
+# pk   if is_dynamic(input) and architecture != "x86_64":
+# pk     log_error("""
+# pk Currently, rev.ng can translate dynamically linked binaries only for x86-64.
+# pk The provided program is dynamically linked but targets {}.
+# pk Try with an input program that is compiled for x86-64, or statically linked.
+# pk If you're just interested in lifting to LLVM IR, simply use `revng lift`.
+# pk     """.format(architecture).strip())
+# pk     return -1
+
+  # Check if tracing is enabled
+  if args.trace:
+    config = "trace"
+  else:
+    config = "normal"
+
+  # Build the name of the support.ll file
+  support_name = "support-{}-{}.ll".format(architecture, config)
+
+  # Find support.ll
+  global script_path
+  support_path = find_file(support_name,
+                           [os.path.join(script_path,
+                                         "..",
+                                         "share",
+                                         "revng"),
+                            script_path])
+  #pk
+  # Perform lifting
+  # if not args.skip:
+
+  #   lift_options = extra_args
+
+  #   if args.base:
+  #     lift_options += ["--base", args.base]
+
+  #   run([get_command("revng-lift"),
+  #        "-g", "ll",
+  #        "--debug-log", "jtcount"]
+  #       + lift_options
+  #       + [input, output])
+  output = args.ll#pk
+
+  # Perform function isolation
+  # if args.isolate:
+  #   isolated = "{}.isolated".format(executable)
+  #   opt_invocation = build_opt_args(["-S",
+  #                                    "-detect-function-boundaries",
+  #                                    "-isolate",
+  #                                    output,
+  #                                    "-o", isolated])
+  #   run(opt_invocation)
+  #   output = isolated
+
+  # Link with support
+  linked = "{}.linked.ll".format(output)
+  run([get_command("llvm-link"),
+       "-S",
+       output,
+       support_path,
+       "-o", linked])
+  output = linked
+
+  # Compile
+  object_file = "{}.o".format(output)
+
+  common_llc_options = ["-disable-machine-licm", "-filetype=obj"]
+  llc = get_command("llc")
+  if optimization_level == 0:
+    run([llc,
+         "-O0",
+         output,
+         "-o", object_file]
+        + common_llc_options)
+  elif optimization_level == 1:
+    run([llc,
+         "-O2",
+         output,
+         "-o", object_file]
+        + common_llc_options)
+  elif optimization_level == 2:
+    optimized = "{}.opt.ll".format(output)
+    run([get_command("opt"),
+         "-O2",
+         "-S",
+         "-enable-pre=false",
+         "-enable-load-pre=false",
+         output,
+         "-o", optimized])
+    run([llc,
+         "-O2",
+         optimized,
+         "-o", object_file]
+        + common_llc_options)
+
+  # Parse .li.csv and .need.csv files
+  linking_options = build_linking_options(li_csv_path, need_csv_path)
+
+  no_pie = ["-fno-pie"]
+
+  # Detect -no-pie support
+  if b"unrecognized command line" not in get_stderr([compiler, "-no-pie"]):
+    no_pie.append("-no-pie")
+
+  run([compiler,
+       object_file,
+       "-lz", "-lm", "-lrt", "-lpthread",
+       "-L", "./",
+       "-o", executable]
+      + no_pie
+      + linking_options)
+
+  # Invoke revng-merge-dynamic
+  unpatched_output = "{}.tmp".format(executable)
+  os.rename(executable, unpatched_output)
+  base_args = ["--base", args.base] if args.base else []
+  run([get_command("revng"),
+       "merge-dynamic",
+       unpatched_output,
+       input,
+       executable]
+      + base_args)
+  os.unlink(unpatched_output)
+
+  return 0
+
+def run_cc(args):
+  # Collect translate options
+  translated_args = []
+  if "--" in args:
+    translate_args, args = split_dash_dash(args)
+
+  if (not args) or ("--help" in args):
+    log_error("Usage: {} cc [[translate-options] --] compiler "
+              + "[compiler-options]".format(real_argv0))
+    return -1
+
+  res = subprocess.call(args)
+  if res != 0:
+    return res
+
+  # Are we linking?
+  if not ("-c" in args):
+    assert "-o" in args
+
+    # Identify the path of the final program
+    output = os.path.abspath(args[args.index("-o") + 1])
+
+    original = output + ".original"
+    translated = original + ".translated"
+    os.rename(output, original)
+
+    result = run_translate(translate_args + [original])
+    if result != 0:
+      return result
+
+    os.rename(translated, output)
+
+  return res
+
+def print_help():
+  global revng_parser
+  revng_parser.print_help()
+
+  sys.stdout.write("""
+The following built-in commands are available:
+
+  help      - print help for the revng driver.
+  translate - translated a program from an architecture to another.
+  opt       - run LLVM's opt loading all rev.ng passes.
+  cc        - compiler wrapper: it behaves like the compiler but invokes
+              translate after linking.
+
+""")
+
+  global search_path
+  programs = set()
+  prefix = "revng-"
+  for path in search_path.split(":"):
+    if os.path.isdir(path):
+      for program in os.listdir(path):
+        if program.startswith(prefix) and which(program, path=search_path):
+          programs.add(program[len(prefix):])
+
+  programs = list(programs)
+  max_length = reduce(lambda old, new: max(old, len(new)), programs, 0)
+  programs = ["{} - see `{} {} --help`".format(program.ljust(max_length),
+                                               real_argv0, program)
+              for program in programs]
+  programs = sorted(programs)
+
+  sys.stdout.write("Additionally, the following external commands are"
+                   + " available:\n\n  {}\n\n".format("\n  ".join(programs)))
+
+  sys.stdout.write(("`{} opt` offers the following extra options compared to"
+                    + " `opt`:\n\n").format(real_argv0))
+
+  args = [get_command("opt"), "--help"]
+  base = subprocess.check_output(wrap(args)).split(b"\n")
+  output = subprocess.check_output(wrap(build_opt_args(args)))
+  extended = output.split(b"\n")
+
+  normalize = lambda data: data.replace(b" ", b"")
+  extra = []
+  i = 0
+  for line in extended:
+    if (i >= len(base)) or (normalize(line) != normalize(base[i])):
+      extra.append(line)
+    else:
+      i += 1
+
+  sys.stdout.flush()
+  sys.stdout.buffer.write(b"\n".join(extra) + b"\n")
+
+def main():
+  parser = argparse.ArgumentParser(description="The rev.ng driver.",
+                                   add_help=False)
+  parser.add_argument("--version",
+                      action="store_true",
+                      help="Display version information.")
+  parser.add_argument("--verbose",
+                      action="store_true",
+                      help="Log all executed commands.")
+  parser.add_argument("--perf",
+                      action="store_true",
+                      help="Run programs under perf (for use with hotspot).")
+  parser.add_argument("--heaptrack",
+                      action="store_true",
+                      help="Run programs under heaptrack.")
+  parser.add_argument("--gdb",
+                      action="store_true",
+                      help="Run programs under gdb.")
+  parser.add_argument("--lldb",
+                      action="store_true",
+                      help="Run programs under lldb.")
+  parser.add_argument("--valgrind",
+                      action="store_true",
+                      help="Run programs under valgrind.")
+  parser.add_argument("--callgrind",
+                      action="store_true",
+                      help="Run programs under callgrind.")
+  parser.add_argument("--help",
+                      action="store_true",
+                      help="Print the help.")
+  parser.add_argument("command",
+                      nargs="?",
+                      default="help",
+                      help="Command to execute.")
+
+  global revng_parser
+  revng_parser = parser
+
+  command_i = None
+  for i, argument in enumerate(sys.argv[1:]):
+    if not argument.startswith("-"):
+      command_i = i
+      break
+
+  if command_i is None:
+    command_args = []
+    root_args = sys.argv[1:]
+  else:
+    command_args = sys.argv[1 + command_i + 1:]
+    root_args = sys.argv[1:1 + command_i + 1]
+
+  args = parser.parse_args(root_args)
+  command = args.command
+
+  global log_commands
+  log_commands = args.verbose
+
+  global command_prefix
+  command_prefix = []
+
+  assert (args.gdb + args.lldb + args.valgrind + args.callgrind) <= 1
+
+  if args.gdb:
+    command_prefix += ["gdb", "--args"]
+
+  if args.lldb:
+    command_prefix += ["lldb", "--"]
+
+  if args.valgrind:
+    command_prefix += ["valgrind"]
+
+  if args.callgrind:
+    command_prefix += ["valgrind", "--tool=callgrind"]
+
+  if args.perf:
+    command_prefix += ["perf",
+                       "record",
+                       "--call-graph", "dwarf",
+                       "--output=perf.data"]
+
+  if args.heaptrack:
+    command_prefix += ["heaptrack"]
+
+  # Get script_path
+  global script_path
+  script_path = os.path.dirname(os.path.realpath(__file__))
+
+  # Create a custom PATH variable to find programs
+  global search_path
+  search_path = os.environ["PATH"]
+  if search_path:
+    search_path = "{}:{}".format(script_path, search_path)
+  else:
+    search_path = script_path
+
+  if args.version:
+    sys.stdout.write("rev.ng version 0.0.0\n")
+    return 0
+
+  if args.help:
+    print_help()
+    return 0
+
+  run_command(command, command_args)
+
+def run_command(command, command_args):
+  # First consider the hardcoded commands
+  if command == "help":
+    print_help()
+  elif command == "opt":
+    run(build_opt_args(command_args))
+  elif command == "cc":
+    result = run_cc(command_args)
+    assert result == 0
+  elif command == "translate":
+    result = run_translate(command_args)
+    assert result == 0
+  elif command == "translate-pk": #pk
+    result = run_translate(command_args+[" -s "]) #pk
+    assert result == 0 #pk
+  else:
+    executable = "revng-" + command
+    if not which(executable, path=search_path):
+      log_error("Can't find the following command: {}".format(executable))
+      assert False
+
+    in_path = get_command(executable)
+    if in_path:
+      arguments = [os.path.abspath(in_path)] + command_args
+      run(arguments)
+    else:
+      log_error("\"revng-{}\" is not a valid command".format(command))
+      assert False
+
+if __name__ == "__main__":
+  sys.exit(main())
