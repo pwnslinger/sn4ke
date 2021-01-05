@@ -1,0 +1,175 @@
+#!/usr/bin/env python
+
+import os, sys
+
+CWD = os.path.dirname(os.path.abspath(__file__))
+from bashUtil import executeCommand
+from irUtil import getSummaryDir, run, run_ll
+
+
+def performOptimization(command, out_file):
+    print("executing the opt command: " + command)
+    out, err, my_time = executeCommand(command.split())
+    if err:
+        # remove the generated file
+        try:
+            os.remove(out_file)
+        except OSError:
+            pass
+
+        # log the failure
+        print('Opt Failed To Mutate:' + out_file + '\n')
+        print('ERROR IS:' + err)
+        return -1
+    return 1
+
+
+#pk def opt(optimization, args, bitcode_file, opt_command):
+def opt(optimization, args, bitcode_file, opt_command, out_file): # pk
+    if optimization == 'replace_const':
+        inst_count = args[0]
+        op_count = args[1]
+        val = args[2]
+#pk        out_file = bitcode_file
+        # pk command = opt_command + " -icrmutate -mutation_loc=" + inst_count + " -mutation_op_loc=" + op_count + " -mutation_val=" + val + " " + bitcode_file + " -o " + out_file
+        command = opt_command + " -icrmutate -mutation_loc=" + inst_count + " -mutation_op_loc=" + op_count + " -mutation_val=" + val + " " + bitcode_file + " -S -o " + out_file
+    elif optimization == 'replace_binary_op':
+        inst_count = args[0]
+        op_type = args[1]
+        val = args[2]
+        #pk out_file = bitcode_file
+        #pk command = opt_command + " -swapBinaryOperators -mutation_loc=" + inst_count + " -icmp_pred=" + val + " -mutation_op=" + val + " " + bitcode_file + " -o " + out_file
+        command = opt_command + " -swapBinaryOperators -mutation_loc=" + inst_count + " -icmp_pred=" + val + " -mutation_op=" + val + " " + bitcode_file + " -S -o " + out_file #pk
+
+    return performOptimization(command, out_file)
+
+
+def getMutationRequest():
+    #pk path = os.path.join(getSummaryDir(), "mutation_request.txt")
+    path = os.path.join(getSummaryDir(), "mutation_requests.txt") # pk
+    print("trying to find the file: " + path)
+    if os.path.isfile(path):
+        print("yes we found the file")
+        with open(path, 'r') as mut_file:
+            mutation = mut_file.readline().strip()
+            return mutation
+    else:
+        return ""
+
+
+def mutateIfRequested(bitcode_file, src_file, opt_command, dummy):  # Using a dummy variable holder for last parameter for consistency
+    path = os.path.join(getSummaryDir(), "mutation_requests.txt") # pk
+    print("trying to find the file: " + path) # pk
+    if os.path.isfile(path):
+        print("yes we found the file")
+        with open(path, 'r') as mut_file:
+            for line in mut_file:
+                mutation = line.strip()
+                print("requested mutation is: " + mutation)
+                if not mutation:
+                    return
+                mutation_parts = mutation.split(":")
+                files = mutation_parts[0].split("+")
+                print("requested bitcode file: " + files[0] + " and src file is: " + files[1])
+                if bitcode_file != files[0] or src_file != files[1]:
+                    print("oh no, no mutation requested for bitcode: " + bitcode_file + " and the src file: " + src_file + ", reading " + files[0] + " and " + files[1])
+                    return
+                print("MUTATING...")
+                mutation_type = mutation_parts[1]
+                actual_mutation = ":".join(mutation_parts[2:])
+                info = actual_mutation.split(':')
+                out_file = CWD + '/../Examples_revng/mutation_results/ll/' + bitcode_file.split('.')[0] + ':' + mutation + '.ll'
+                if mutation_type == "binaryOp":
+                    print("the info for binaryOp is: " + str(info))
+                    inst_count = info[0]
+                    op_type = info[1]
+                    value = info[2]
+                    if opt('replace_binary_op', [inst_count, op_type, value], bitcode_file, opt_command, out_file) == -1:
+                        print("OPTIMUTE: MUTATION FAILED TO APPLY")
+                else: # it's a replace constant
+                    print("the info for const is: " + str(info))
+                    inst_count = info[0]
+                    op_count = info[1]
+                    value = info[3]
+                    if opt('replace_const', [inst_count, op_count, value], bitcode_file, opt_command, out_file) == -1:
+                        print("OPTIMUTE: MUTATION FAILED TO APPLY")
+
+
+def mutateIfRequested_ll(bitcode_file, inp_bc_file, opt_command, dummy):  # Using a dummy variable holder for last parameter for consistency
+    path = os.path.join(getSummaryDir(), "mutation_requests.txt") # pk
+    print("trying to find the file: " + path) # pk
+    if os.path.isfile(path):
+        print("yes we found the file")
+        with open(path, 'r') as mut_file:
+            for line in mut_file:
+                mutation = line.strip()
+                print("requested mutation is: " + mutation)
+                if not mutation:
+                    return
+                mutation_parts = mutation.split(":")
+                files = mutation_parts[0].split("+")
+                print("requested bitcode file: " + files[0] + " and input bc file is: " + files[1])
+                if bitcode_file != files[0] or inp_bc_file != files[1]:
+                    print("oh no, no mutation requested for bitcode: " + bitcode_file + " and the src file: " + inp_bc_file + ", reading " + files[0] + " and " + files[1])
+                    return
+                print("MUTATING...")
+                mutation_type = mutation_parts[1]
+                actual_mutation = ":".join(mutation_parts[2:])
+                info = actual_mutation.split(':')
+                #pk out_file = CWD + '/../Examples_revng/mutation_results/ll/' + bitcode_file.split('.')[0] + ':' + mutation + '.ll'
+                out_file = CWD + '/../Examples_revng/mutation_results/ll/' + bitcode_file[:-3] + ':' + mutation + '.ll'
+                if mutation_type == "binaryOp":
+                    print("the info for binaryOp is: " + str(info))
+                    inst_count = info[0]
+                    op_type = info[1]
+                    value = info[2]
+                    #pk if opt('replace_binary_op', [inst_count, op_type, value], bitcode_file, opt_command, out_file) == -1:
+                    if opt('replace_binary_op', [inst_count, op_type, value], inp_bc_file, opt_command, out_file) == -1: #pk
+                        print("OPTIMUTE: MUTATION FAILED TO APPLY")
+                else: # it's a replace constant
+                    print("the info for const is: " + str(info))
+                    inst_count = info[0]
+                    op_count = info[1]
+                    value = info[3]
+                    #pk if opt('replace_const', [inst_count, op_count, value], bitcode_file, opt_command, out_file) == -1:
+                    if opt('replace_const', [inst_count, op_count, value], inp_bc_file, opt_command, out_file) == -1: #pk
+                        print("OPTIMUTE: MUTATION FAILED TO APPLY")
+                break #pk: for debugging only run one mutation
+
+
+
+#    mutation = getMutationRequest()
+#    print("requested mutation is: " + mutation)
+#    if not mutation:
+#        return
+#    mutation_parts = mutation.split(":")
+#    files = mutation_parts[0].split("+")
+#    print("requested bitcode file: " + files[0] + " and src file is: " + files[1])
+#    if bitcode_file != files[0] or src_file != files[1]:
+#        print("oh no, no mutation requested for bitcode: " + bitcode_file + " and the src file: " + src_file + ", reading " + files[0] + " and " + files[1])
+#        return
+#    print("MUTATING...")
+#    mutation_type = mutation_parts[1]
+#    actual_mutation = ":".join(mutation_parts[2:])
+#    info = actual_mutation.split(':')
+#    if mutation_type == "binaryOp":
+#        print("the info for binaryOp is: " + str(info))
+#        inst_count = info[0]
+#        op_type = info[1]
+#        value = info[2]
+#        if opt('replace_binary_op', [inst_count, op_type, value], bitcode_file, opt_command) == -1:
+#            print("OPTIMUTE: MUTATION FAILED TO APPLY")
+#    else: # it's a replace constant
+#        print("the info for const is: " + str(info))
+#        inst_count = info[0]
+#        op_count = info[1]
+#        value = info[3]
+#        if opt('replace_const', [inst_count, op_count, value], bitcode_file, opt_command) == -1:
+#            print("OPTIMUTE: MUTATION FAILED TO APPLY")
+    
+
+def main():
+    run_ll("mutation", mutateIfRequested_ll, 1)
+
+if __name__ == '__main__':
+    main()

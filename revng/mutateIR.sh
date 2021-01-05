@@ -21,6 +21,9 @@ export REVDIR=/home/pc-5/fi-bin/newInstall/orchestra/root/bin/ # pk: directory o
 # generate .ll
 #$REVDIR/clang $TEST.c -S -emit-llvm -o $TEST.ll
 
+# to make sure the original binary is here
+cp ../Examples/$TEST . 
+
 
 ####################################################################################################################
 # initial lift to llvm-ir
@@ -34,7 +37,7 @@ fi
 
 ####################################################################################################################
 # generate coverage
-rm -f /tmp/llvm_mutate_trace # remove any existing coverage
+rm -f /tmp/srciror_llvm_coverage # remove any existing coverage
 rm -rf ~/.srciror # remove logs and results from previous runs
 if [[ $RUN_COVERAGE == 1 ]];
 then
@@ -78,6 +81,6 @@ fi
 
 ####################################################################################################################
 # cleanup current directory 
-rm ${TEST}_lifted.ll.need.csv
-rm ${TEST}_lifted.ll.li.csv
-rm ${TEST}_lifted.ll.coverage.csv
+#rm ${TEST}_lifted.ll.need.csv
+#rm ${TEST}_lifted.ll.li.csv
+#rm ${TEST}_lifted.ll.coverage.csv
