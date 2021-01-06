@@ -15,6 +15,7 @@ import os
 import re
 import copy
 import logging
+import signal
 import random
 from gtirb_functions import Function
 from gtirb_capstone import RewritingContext
@@ -138,6 +139,25 @@ def gen_name(module_name, fname, category, offset, orig, repl, logger=logging.Lo
     logger.info(mutation_name)
     return mutation_name
 
+def trivial_test(filename:str) -> bool:
+    with open('./test.txt', 'wb') as f:
+        f.write(b"!!TEST!!")
+    args = ['-h', '--help', '', './test.txt']
+    status = True
+    
+    for arg in args:
+        cmd = [filename, arg]
+        # success run output
+        proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
+        _, stderr = proc.communicate(input=b'\n')
+        if stderr:
+            import ipdb; ipdb.set_trace()
+            # in case of error
+            if proc.returncode == -signal.SIGSEGV:
+                return False
+    os.unlink('./test.txt')
+    return status
+
 def save_ir(ctx, fname, logger=logging.Logger("null")):
     logger.info("Saving new IR...")
     basename = fname.split(':')[0]
@@ -208,6 +228,9 @@ def build_mutation(block, ctx, insn, offset, group_name, fname, encoding, count,
 
     # compile ir
     compile_ir(mutation_name, logger=logger)
+
+    # trivial test
+    trivial_test('./results/%s/bin/%s'%(ctx.ir.modules[0].name, mutation_name))
 
 def mutation(block, ctx, insn, offset, group_name, fname, group=None, logger=logging.Logger("null")):
     if group is not None:
@@ -346,7 +369,7 @@ def rewrite_function(module, func, ctx, logger=logging.Logger("null")):
                         
                         logger.info("\nReplacing %s with %s"% (str(i), asm))
                         
-                        build_mutation(b, ctx, i, offset, "constOp", fname, encoding, count, 'imm(%s)'%c, logger=logging.Logger("null"))
+                        build_mutation(b, ctx, i, offset, "constOp", fname, encoding, count, 'imm:%s'%const, logger=logging.Logger("null"))
                         
             if i.id in insn_logic.keys():
                 # swapping operators
