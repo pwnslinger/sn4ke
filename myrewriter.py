@@ -151,10 +151,10 @@ def trivial_test(filename:str) -> bool:
         proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
         _, stderr = proc.communicate(input=b'\n')
         if stderr:
-            import ipdb; ipdb.set_trace()
             # in case of error
-            if proc.returncode == -signal.SIGSEGV:
-                return False
+            if proc.returncode - 128 == signal.SIGSEGV:
+                status = False
+                break
     os.unlink('./test.txt')
     return status
 
@@ -202,6 +202,14 @@ def compile_ir(fname, logger=logging.Logger("null")):
 
         os.remove(ir_out)
 
+    # takes a lot of space and we probably wont need them..
+    os.unlink(ir_out)
+
+def log(bin_name, text):
+    log_path = './results/%s/failed.txt'%bin_name
+    with open(log_path, 'a+') as f:
+        f.write(text)
+
 def build_mutation(block, ctx, insn, offset, group_name, fname, encoding, count, repl, logger=logging.Logger("null")):
     
     # check instruction size for overlappings, if any
@@ -229,8 +237,19 @@ def build_mutation(block, ctx, insn, offset, group_name, fname, encoding, count,
     # compile ir
     compile_ir(mutation_name, logger=logger)
 
+    # test!
+    if len(ctx.ir.modules) >= 2:
+        import ipdb; ipdb.set_trace()
+
     # trivial test
-    trivial_test('./results/%s/bin/%s'%(ctx.ir.modules[0].name, mutation_name))
+    bin_path = './results/%s/bin/%s'%(ctx.ir.modules[0].name, mutation_name)
+    status = trivial_test(bin_path)
+
+    if not status:
+        logger.info('Trivial Test: Failed, filename = %s'%mutation_name)
+        log(ctx.ir.modules[0].name, '%s\n'%mutation_name)
+        os.unlink(bin_path)
+
 
 def mutation(block, ctx, insn, offset, group_name, fname, group=None, logger=logging.Logger("null")):
     if group is not None:
