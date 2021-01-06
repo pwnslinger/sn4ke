@@ -28,8 +28,10 @@ from capstone import *
 from capstone.x86 import *
 
 def rewrite_functions(infile, logger=logging.Logger("null"), context=None, fname=None):
+    logger.info("Generating GTIRB IR...")
+    gtirb_protobuf(infile)
     logger.info("Loading IR... " + infile)
-    ir = IR.load_protobuf(infile)
+    ir = IR.load_protobuf("%s.gtirb"%infile)
 
     logger.info("Preparing IR for rewriting...")
     ctx = RewritingContext(ir) if context is None else context
@@ -88,10 +90,11 @@ insn_branch = {X86_INS_JAE: 'jae', X86_INS_JA: 'ja', X86_INS_JBE: 'jbe', X86_INS
             X86_INS_JECXZ: 'jecxz', X86_INS_JE: 'je', X86_INS_JGE: 'jge', X86_INS_JG: 'jg', X86_INS_JLE: 'jle',  
             X86_INS_JL: 'jl', X86_INS_JMP: 'jmp', X86_INS_JNE: 'jne', X86_INS_JNO: 'jno', X86_INS_JNP: 'jnp', 
                 X86_INS_JNS: 'jns', X86_INS_JO: 'jo', X86_INS_JP: 'jp', X86_INS_JRCXZ: 'jrcxz', X86_INS_JS: 'js',
-                X86_INS_NOP: 'nop'}
+            }
 
 insn_arithmetic = {X86_INS_ADD: 'add', X86_INS_SUB: 'sub', X86_INS_MUL: 'mul', X86_INS_DIV: 'div', 
-                    X86_INS_SHL: 'shl', X86_INS_SHR: 'shr', X86_INS_ROL: 'rol', X86_INS_ROR: 'ror'}
+                    X86_INS_SHL: 'shl', X86_INS_SHR: 'shr', X86_INS_ROL: 'rol', X86_INS_ROR: 'ror'
+                    }
 
 insn_logic = {X86_INS_XOR: 'xor', X86_INS_OR: 'or', X86_INS_AND: 'and'}
 
@@ -100,7 +103,8 @@ insn_arilogic = {X86_INS_NEG: 'neg', X86_INS_NOT: 'not', X86_INS_INC: 'inc', X86
 insn_flag_manip = {X86_INS_SETAE: 'setae', X86_INS_SETA: 'seta', X86_INS_SETBE: 'setbe', X86_INS_SETB: 'setb', 
                     X86_INS_SETE: 'sete', X86_INS_SETGE: 'setge', X86_INS_SETG: 'setg', X86_INS_SETLE: 'setle', 
                     X86_INS_SETL: 'setl', X86_INS_SETNE: 'setne', X86_INS_SETNO: 'setno', X86_INS_SETNP: 'setnp', 
-                    X86_INS_SETNS: 'setns', X86_INS_SETO: 'seto', X86_INS_SETP: 'setp', X86_INS_SETS: 'sets'}
+                    X86_INS_SETNS: 'setns', X86_INS_SETO: 'seto', X86_INS_SETP: 'setp', X86_INS_SETS: 'sets'
+                    }
 
 def ks_wrapper(asm):
     proc = subprocess.Popen(['kstool', 'x64', asm],stdout=subprocess.PIPE)
@@ -113,13 +117,12 @@ def ks_wrapper(asm):
 
 def mutate_asm(insn_id, insn):
     asm = ""
+    if insn_id == X86_INS_NOP:
+        n_bytes = insn.size
+        asm = "nop;"*n_bytes
     if insn_id in insn_branch.keys():
         imm_val = insn.op_str
-        if insn_id == X86_INS_NOP:
-            n_bytes = insn.size
-            asm = "nop;"*n_bytes
-        else:
-            asm = "%s %s;"% (insn_branch[insn_id], imm_val)
+        asm = "%s %s;"% (insn_branch[insn_id], imm_val)
     if insn_id in insn_arithmetic:
         operands = re.findall(r':\s\w+(\s.*)>', str(insn))[0]
         asm = insn_arithmetic[insn_id] + operands
@@ -137,13 +140,22 @@ def gen_name(module_name, fname, category, offset, orig, repl, logger=logging.Lo
 
 def save_ir(ctx, fname, logger=logging.Logger("null")):
     logger.info("Saving new IR...")
-    ir_out = fname + ".gtirb"
+    basename = fname.split(':')[0]
+    ir_dir = './results/%s/ir'%basename
+    if not os.path.exists(ir_dir):
+        os.makedirs(ir_dir)
+    ir_out = os.path.join(ir_dir, fname + ".gtirb")
     ctx.ir.save_protobuf(ir_out)
     logger.info("Done.")
 
 def compile_ir(fname, logger=logging.Logger("null")):
     logger.info("Rebuild the mutation...")
-    ir_out = fname + ".gtirb"
+    basename = fname.split(':')[0]
+    bin_dir = './results/%s/bin'%basename
+    if not os.path.exists(bin_dir):
+        os.makedirs(bin_dir)
+    ir_out = os.path.join('./results/%s/ir/%s'%(basename, fname + ".gtirb"))
+    bin_out = os.path.join(bin_dir, fname)
     args_pp = [
         "gtirb-pprinter",
         ir_out,
@@ -153,7 +165,7 @@ def compile_ir(fname, logger=logging.Logger("null")):
         #"--compiler-args", 
         #"-fPIC",
         "-b",
-        fname,
+        bin_out,
         "-c",
         "-nostartfiles",
     ]
@@ -219,7 +231,29 @@ def mutation(block, ctx, insn, offset, group_name, fname, group=None, logger=log
 
             logger.info("\nReplacing %s with %s"% (str(insn), asm))
             build_mutation(block, ctx, insn, offset, group_name, fname, encoding, count, group[i], logger=logging.Logger("null"))
+    else:
+        # handle nop cases : skip instruction
+        asm = mutate_asm(X86_INS_NOP, insn)
 
+        (encoding, count), err = ks_wrapper(asm)
+
+        if err:
+            return
+
+        if encoding is None:
+            logger.debug("\nCouldn't handle %s"%group[i])
+            return
+
+        logger.info("\nReplacing %s with %s"% (str(insn), asm))
+        build_mutation(block, ctx, insn, offset, group_name, fname, encoding, count, "nop", logger=logging.Logger("null"))
+
+def gtirb_protobuf(filename):
+    disasm_args = ['ddisasm',
+                    filename,
+                    '--ir',
+                    "%s.gtirb"%filename,
+                    ]
+    return subprocess.call(disasm_args)
 
 def mutation_rewrite(module, ctx, block, asm, insn, offset, repl, logger=logging.Logger("null")):
     # convert to byte using keystone
@@ -290,6 +324,9 @@ def rewrite_function(module, func, ctx, logger=logging.Logger("null")):
                 # swapping operators
                 mutation(b, ctx, i, offset, "arithOp", fname, insn_arithmetic, logger=logger)
 
+                # skip instruction
+                mutation(b, ctx, i, offset, "nopOp", fname, logger=logger)
+
                 # Constant: replaces every integer constant c with a value from the set {-1, 0, 1, -c, c-1, c+1}\{c}
                 if src.type == X86_OP_IMM:
                     insn_str = re.findall(r':\s(.*\s.*,\s).*>', str(i))[0]
@@ -312,7 +349,19 @@ def rewrite_function(module, func, ctx, logger=logging.Logger("null")):
                         build_mutation(b, ctx, i, offset, "constOp", fname, encoding, count, 'imm(%s)'%c, logger=logging.Logger("null"))
                         
             if i.id in insn_logic.keys():
+                # swapping operators
                 mutation(b, ctx, i, offset, "logicOp", fname, insn_logic, logger=logger)
+
+                # skip instruction
+                mutation(b, ctx, i, offset, "nopOp", fname, logger=logger)
+
+            if i.id in insn_arilogic.keys():
+                import ipdb; ipdb.set_trace()
+                # swapping operators
+                mutation(b, ctx, i, offset, "arilogicOp", fname, insn_arilogic, logger=logger)
+
+                # skip instruction
+                mutation(b, ctx, i, offset, "nopOp", fname, logger=logger)
 
             offset += i.size
 
@@ -327,8 +376,6 @@ def main():
     ap.add_argument("-q", "--quiet", action="store_true", help="No output")
 
     args = ap.parse_args()
-
-    ks_wrapper('add byte ptr [rax - 0x75], cl')
 
     logging.basicConfig(format="%(message)s")
     logger = logging.getLogger("sn4ke")
