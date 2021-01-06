@@ -419,8 +419,21 @@ def main():
 
     args = ap.parse_args()
 
-    logging.basicConfig(format="%(message)s")
+    logging.basicConfig(format="%(message)s",
+                        level=logging.INFO,
+                        filename='./%s.log'%os.path.basename(args.infile),
+                        filemode='w')
+    # define a Handler which writes INFO messages or higher to the sys.stderr
+    console = logging.StreamHandler()
+    console.setLevel(logging.INFO)
+    # set a format which is simpler for console use
+    formatter = logging.Formatter('%(message)s')
+    # tell the handler to use this format
+    console.setFormatter(formatter)
     logger = logging.getLogger("sn4ke")
+    # add the handler to the root logger
+    logger.addHandler(console)
+
     if args.verbose:
         logger.setLevel(logging.DEBUG)
     elif not args.quiet:
