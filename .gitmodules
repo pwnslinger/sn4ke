@@ -14,3 +14,7 @@
 	path = keystone
 	url = https://github.com/keystone-engine/keystone.git
 	branch = master
+[submodule "gtirb-pprinter"]
+	path = gtirb-pprinter
+	url = https://github.com/GrammaTech/gtirb-pprinter.git
+	branch = master
