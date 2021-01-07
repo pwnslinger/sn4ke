@@ -10,3 +10,7 @@
 	path = capstone
 	url = https://github.com/aquynh/capstone.git
 	branch = master
+[submodule "keystone"]
+	path = keystone
+	url = https://github.com/keystone-engine/keystone.git
+	branch = master
