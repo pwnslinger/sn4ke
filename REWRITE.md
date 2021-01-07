@@ -92,3 +92,9 @@ Compiler arguments: -o test /tmp/fileQtPVZl.s -lm -nostartfiles -pie
 ```  
 
 You should put these adjustments under [./myrewriter.py#compile_ir](./myrewriter.py#L184-L194) function. 
+
+
+# Transfer files
+To transfer mutations from server to your local use the following command:  
+`scp -r mohsen@cips.dyndns.org:~/sn4ke/results/lbm_base.amd64-m64-gcc42-nn .`  
+
