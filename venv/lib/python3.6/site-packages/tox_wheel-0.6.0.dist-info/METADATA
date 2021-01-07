@@ -1,0 +1,205 @@
+Metadata-Version: 2.1
+Name: tox-wheel
+Version: 0.6.0
+Summary: A Tox plugin that builds and installs wheels instead of sdist.
+Home-page: https://github.com/ionelmc/tox-wheel
+Author: Ionel Cristian Mărieș
+Author-email: contact@ionelmc.ro
+License: BSD-2-Clause
+Project-URL: Changelog, https://github.com/ionelmc/tox-wheel/blob/master/CHANGELOG.rst
+Project-URL: Issue Tracker, https://github.com/ionelmc/tox-wheel/issues
+Keywords: tox,tox-wheel,wheel,pep517,pep518
+Platform: UNKNOWN
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Operating System :: Unix
+Classifier: Operating System :: POSIX
+Classifier: Operating System :: Microsoft :: Windows
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+Classifier: Topic :: Utilities
+Requires-Python: >=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*
+Requires-Dist: tox (>=3.9.0)
+Requires-Dist: wheel (>=0.33.1)
+
+========
+Overview
+========
+
+
+
+A `tox <http://tox.readthedocs.org>`_ plugin that builds and installs wheels instead of sdist.
+
+* Free software: BSD 2-Clause License
+
+Installation
+============
+
+::
+
+    pip install tox-wheel
+
+You can also install the in-development version with::
+
+    pip install https://github.com/ionelmc/tox-wheel/archive/master.zip
+
+
+Documentation
+=============
+
+Enabling
+--------
+
+To enable either use ``tox --wheel`` or change your ``tox.ini`` if you always want the plugin to be enabled:
+
+.. code-block:: ini
+
+    [testenv]
+    wheel = true
+
+You can also use factors in ``tox.ini``:
+
+.. code-block:: ini
+
+    [tox]
+    envlist = {py27,py35,py36,py37,py38,pypy,pypy3}-{cover,nocov}
+
+    [testenv]
+    wheel =
+        cover: false
+        nocov: true
+
+
+Build configuration
+-------------------
+
+This plugin will build wheels for all the active environments. Note that building will be done in a batch before any testing starts
+(in order to support ``tox --parallel`` mode).
+
+If you can produce universal wheels you might want to configure the build env so that the wheel is only built once for all the envs:
+
+.. code-block:: ini
+
+    [testenv]
+    wheel_build_env = build
+
+    [testenv:build]
+
+Note that you can also use ``wheel_build_env`` for situation where you have many environments for the same interpreter:
+
+.. code-block:: ini
+
+    [testenv:py38]
+    ; regular testing
+
+    [testenv:py38-extras]
+    ; tests with optional dependencies
+    wheel_build_env = py38
+
+    [testenv:docs]
+    ; docs building
+    wheel_build_env = py38
+
+The plugin cleans the build dir by default, in case you want to speed things further (at the risk of build caching problems)
+you could use ``tox --wheel-dirty``.
+
+You can also place this configuration in ``tox.ini`` but there will be a unpleasant surprise factor if you
+ever hit the aforementioned build problems:
+
+.. code-block:: ini
+
+    [testenv]
+    wheel_dirty = true
+
+PEP517 support
+--------------
+
+If you have a custom ``[build-system] build-backend`` in your ``pyproject.toml`` you need to enable the PEP517 builder by
+having this in your ``tox.ini``:
+
+.. code-block:: ini
+
+    [testenv]
+    wheel_pep517 = true
+
+Enabling this will delegate building to ``pip wheel --use-pep517``.
+
+Development
+===========
+
+To run the all tests run::
+
+    tox
+
+
+
+Changelog
+=========
+
+0.6.0 (2020-11-06)
+------------------
+
+* Fixed unnecessary build directory cleanup and removed dead code.
+  Contributed by Thomas Grainger in `#9 <https://github.com/ionelmc/tox-wheel/pull/9>`_.
+* The ``isolated_build`` tox option is now an alias for ``wheel_pep517``.
+  Contributed by Thomas Grainger in `#6 <https://github.com/ionelmc/tox-wheel/pull/6>`_.
+* Added more configuration examples.
+
+0.5.0 (2020-08-06)
+------------------
+
+* Added support for PEP 517/518.
+  Contributed by Antonio Botelho in `#5 <https://github.com/ionelmc/tox-wheel/pull/5>`_.
+
+0.4.2 (2019-05-15)
+------------------
+
+* Improved logging a bit so messages are less confusing (don't emit ``wheel-make path/to/setup.py``).
+* Moved dist/build cleanup right before ``bdist_wheel``.
+
+0.4.1 (2019-05-15)
+------------------
+
+* Improved error handling when no dists are built.
+
+0.4.0 (2019-05-05)
+------------------
+
+* Fixed compatibility with tox and changed requirement for minimum tox version to 3.9.0.
+
+0.3.0 (2019-01-26)
+------------------
+
+* Added support for ``tox --parallel`` mode.
+* Added ``wheel_build_env`` config option.
+* Renamed ``wheel_clean_build`` config option to ``wheel_dirty``.
+* Added ``--wheel-dirty`` CLI argument.
+
+0.2.1 (2019-01-12)
+------------------
+
+* Added ``wheel`` to dependencies.
+
+0.2.0 (2019-01-12)
+------------------
+
+* Remove ``--wheel-clean-build`` CLI option. Build directory cleaning is now on by default.
+  Correct behavior should be the default.
+* Added support for ``[testenv] wheel`` (default: ``false``) and ``[testenv] wheel_clean_build`` (default: ``true``)
+  in ``tox.ini``.
+
+0.1.0 (2019-01-09)
+------------------
+
+* First release on PyPI.
+
+

@@ -1,0 +1,7 @@
+action: venv, msg: getenv
+cwd: /home/pwnslinger/Projects/mutant/sn4ke/gtirb-capstone
+cmd: /home/pwnslinger/.virtualenvs/py36/bin/python3.6 -m virtualenv --no-download --python /home/pwnslinger/.virtualenvs/py36/bin/python3.6 venv
+created virtual environment CPython3.6.9.final.0-64 in 470ms
+  creator CPython3Posix(dest=/home/pwnslinger/Projects/mutant/sn4ke/gtirb-capstone/venv, clear=False, global=False)
+  seeder FromAppData(download=False, pip=latest, setuptools=latest, wheel=latest, via=copy, app_data_dir=/home/pwnslinger/.local/share/virtualenv/seed-app-data/v1.0.1)
+  activators BashActivator,CShellActivator,FishActivator,PowerShellActivator,PythonActivator,XonshActivator

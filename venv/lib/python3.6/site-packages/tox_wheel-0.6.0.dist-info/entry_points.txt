@@ -1,0 +1,3 @@
+[tox]
+wheel = tox_wheel.plugin
+

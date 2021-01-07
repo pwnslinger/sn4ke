@@ -1,0 +1,4 @@
+[submodule "gtirb-capstone"]
+	path = gtirb-capstone
+	url = git@github.com:pwnslinger/gtirb-capstone.git
+	branch = wip/gtirb-rewriter
