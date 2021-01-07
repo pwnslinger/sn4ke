@@ -145,7 +145,7 @@ def gen_name(module_name, fname, category, offset, orig, repl, logger=logging.Lo
     logger.info(mutation_name)
     return mutation_name
 
-def trivial_test(filename:str) -> bool:
+def trivial_test(filename:str, timeout=2) -> bool:
     
     args = ['-h', '--help', '', './test.txt']
     status = True
@@ -154,7 +154,10 @@ def trivial_test(filename:str) -> bool:
         cmd = [filename, arg]
         # success run output
         proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
-        _, stderr = proc.communicate(input=b'\n')
+        try:
+            _, stderr = proc.communicate(input=b'\n', timeout=timeout)
+        except subprocess.TimeoutExpired:
+            return False
         if stderr:
             # in case of error
             if proc.returncode - 128 == signal.SIGSEGV:
