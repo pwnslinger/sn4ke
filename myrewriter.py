@@ -17,14 +17,13 @@ import copy
 import logging
 import signal
 import random
-from gtirb_functions import Function
-from gtirb_capstone import RewritingContext
-
 import argparse
 import logging
-from gtirb import IR
 import subprocess
-
+from gtirb_functions import Function
+from gtirb_capstone import RewritingContext
+from gtirb import IR
+from tqdm import tqdm
 from capstone import *
 from capstone.x86 import *
 
@@ -42,8 +41,8 @@ def rewrite_functions(infile, logger=logging.Logger("null"), context=None, fname
     for m in ctx.ir.modules:
         functions = Function.build_functions(m)
         print("%d functions in binary" % (len(functions)))
-        for f in functions:
-            print("fname %s" %(f.get_name()))
+        for f in tqdm(functions, desc="Loop over functions"):
+            #print("fname %s" %(f.get_name()))
             if fname == None or fname == f.get_name():
                 rewrite_function(m, f, ctx, logger=logger)
 
@@ -93,13 +92,15 @@ insn_branch = {X86_INS_JAE: 'jae', X86_INS_JA: 'ja', X86_INS_JBE: 'jbe', X86_INS
                 X86_INS_JNS: 'jns', X86_INS_JO: 'jo', X86_INS_JP: 'jp', X86_INS_JRCXZ: 'jrcxz', X86_INS_JS: 'js',
             }
 
-insn_arithmetic = {X86_INS_ADD: 'add', X86_INS_SUB: 'sub', X86_INS_MUL: 'mul', X86_INS_DIV: 'div', 
-                    X86_INS_SHL: 'shl', X86_INS_SHR: 'shr', X86_INS_ROL: 'rol', X86_INS_ROR: 'ror'
+insn_arithmetic = {X86_INS_ADD: 'add', X86_INS_SUB: 'sub', X86_INS_ROR: 'ror', 
+                    X86_INS_SHL: 'shl', X86_INS_SHR: 'shr', X86_INS_ROL: 'rol', 
                     }
 
 insn_logic = {X86_INS_XOR: 'xor', X86_INS_OR: 'or', X86_INS_AND: 'and'}
 
-insn_arilogic = {X86_INS_NEG: 'neg', X86_INS_NOT: 'not', X86_INS_INC: 'inc', X86_INS_DEC: 'dec'}
+insn_arilogic = {X86_INS_NEG: 'neg', X86_INS_NOT: 'not', X86_INS_INC: 'inc', 
+                X86_INS_MUL: 'mul', X86_INS_DIV: 'div', X86_INS_DEC: 'dec',
+                }
 
 insn_flag_manip = {X86_INS_SETAE: 'setae', X86_INS_SETA: 'seta', X86_INS_SETBE: 'setbe', X86_INS_SETB: 'setb', 
                     X86_INS_SETE: 'sete', X86_INS_SETGE: 'setge', X86_INS_SETG: 'setg', X86_INS_SETLE: 'setle', 
@@ -121,6 +122,9 @@ def mutate_asm(insn_id, insn):
     if insn_id == X86_INS_NOP:
         n_bytes = insn.size
         asm = "nop;"*n_bytes
+    if insn_id == X86_INS_JMP:
+        imm_val = insn.op_str
+        asm = "%s %s;"% ("jmp", imm_val)
     if insn_id in insn_branch.keys():
         imm_val = insn.op_str
         asm = "%s %s;"% (insn_branch[insn_id], imm_val)
@@ -131,7 +135,8 @@ def mutate_asm(insn_id, insn):
         operands = re.findall(r':\s\w+(\s.*)>', str(insn))[0]
         asm = insn_logic[insn_id] + operands
     if insn_id in insn_arilogic:
-        import ipdb; ipdb.set_trace()
+        operand = re.findall(r':\s\w+\s(.*)>', str(insn))[0]
+        asm = insn_arilogic[insn_id] + operand
     return asm
 
 def gen_name(module_name, fname, category, offset, orig, repl, logger=logging.Logger("null")):
@@ -140,8 +145,7 @@ def gen_name(module_name, fname, category, offset, orig, repl, logger=logging.Lo
     return mutation_name
 
 def trivial_test(filename:str) -> bool:
-    with open('./test.txt', 'wb') as f:
-        f.write(b"!!TEST!!")
+    
     args = ['-h', '--help', '', './test.txt']
     status = True
     
@@ -155,7 +159,7 @@ def trivial_test(filename:str) -> bool:
             if proc.returncode - 128 == signal.SIGSEGV:
                 status = False
                 break
-    os.unlink('./test.txt')
+    #os.unlink('./test.txt')
     return status
 
 def save_ir(ctx, fname, logger=logging.Logger("null")):
@@ -183,15 +187,15 @@ def compile_ir(fname, logger=logging.Logger("null")):
         "--skip-section",
         ".eh_frame",
         #"--compiler-args", 
-        #"-fPIC",
+        #"-lm",
         "-b",
         bin_out,
         "-c",
         "-nostartfiles",
     ]
-    ec = subprocess.call(args_pp)
+    p = subprocess.Popen(args_pp, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
 
-    if ec:
+    if p.returncode:
         '''
         relocation R_X86_64_8 against symbol `_init' can not be used when making a PIE object; recompile with -fPIC
         I tracked this error and it comes from gtirb-pprinter@src/gtirb_pprinter/ElfBinaryPrinter.cpp#L105
@@ -203,7 +207,7 @@ def compile_ir(fname, logger=logging.Logger("null")):
         os.remove(ir_out)
 
     # takes a lot of space and we probably wont need them..
-    os.unlink(ir_out)
+    #os.unlink(ir_out)
 
 def log(bin_name, text):
     log_path = './results/%s/failed.txt'%bin_name
@@ -236,10 +240,6 @@ def build_mutation(block, ctx, insn, offset, group_name, fname, encoding, count,
 
     # compile ir
     compile_ir(mutation_name, logger=logger)
-
-    # test!
-    if len(ctx.ir.modules) >= 2:
-        import ipdb; ipdb.set_trace()
 
     # trivial test
     bin_path = './results/%s/bin/%s'%(ctx.ir.modules[0].name, mutation_name)
@@ -275,19 +275,29 @@ def mutation(block, ctx, insn, offset, group_name, fname, group=None, logger=log
             build_mutation(block, ctx, insn, offset, group_name, fname, encoding, count, group[i], logger=logging.Logger("null"))
     else:
         # handle nop cases : skip instruction
-        asm = mutate_asm(X86_INS_NOP, insn)
+        if group_name == "nopOp":
+            asm = mutate_asm(X86_INS_NOP, insn)
 
-        (encoding, count), err = ks_wrapper(asm)
+            (encoding, count), err = ks_wrapper(asm)
 
-        if err:
-            return
+            if err:
+                return
 
-        if encoding is None:
-            logger.debug("\nCouldn't handle %s"%group[i])
-            return
+            logger.info("\nReplacing %s with %s"% (str(insn), asm))
+            build_mutation(block, ctx, insn, offset, group_name, fname, encoding, count, "nop", logger=logging.Logger("null"))
+        # handle jump case only - taken branch
+        elif group_name == "brOp":
+            if insn.id == X86_INS_JMP:
+                return
+            asm = mutate_asm(X86_INS_JMP, insn)
 
-        logger.info("\nReplacing %s with %s"% (str(insn), asm))
-        build_mutation(block, ctx, insn, offset, group_name, fname, encoding, count, "nop", logger=logging.Logger("null"))
+            (encoding, count), err = ks_wrapper(asm)
+
+            if err:
+                return
+
+            logger.info("\nReplacing %s with %s"% (str(insn), asm))
+            build_mutation(block, ctx, insn, offset, group_name, fname, encoding, count, "jmp", logger=logging.Logger("null"))
 
 def gtirb_protobuf(filename):
     disasm_args = ['ddisasm',
@@ -334,7 +344,7 @@ def rewrite_function(module, func, ctx, logger=logging.Logger("null")):
     blocks = func.get_all_blocks()
     fname = func.get_name()
 
-    for b in blocks:
+    for b in tqdm(blocks, desc="Loop over blocks %s"%fname):
         bytes = b.byte_interval.contents[b.offset : b.offset + b.size]
         offset = 0
 
@@ -344,7 +354,14 @@ def rewrite_function(module, func, ctx, logger=logging.Logger("null")):
                 #if i.id in insn_branch.keys():
                 #branch_mutator(module, ctx, b, i, offset, logger)
                 
-                mutation(b, ctx, i, offset, "brOp", fname, insn_branch, logger=logger)
+                # try all branch mutatation cases
+                #mutation(b, ctx, i, offset, "brOp", fname, insn_branch, logger=logger)
+
+                # just try replacement with jmp
+                mutation(b, ctx, i, offset, "brOp", fname, logger=logger)
+
+                # skip instruction
+                mutation(b, ctx, i, offset, "nopOp", fname, logger=logger)
                 
                 '''
                 # just copy the bytes of the jump
@@ -398,7 +415,6 @@ def rewrite_function(module, func, ctx, logger=logging.Logger("null")):
                 mutation(b, ctx, i, offset, "nopOp", fname, logger=logger)
 
             if i.id in insn_arilogic.keys():
-                import ipdb; ipdb.set_trace()
                 # swapping operators
                 mutation(b, ctx, i, offset, "arilogicOp", fname, insn_arilogic, logger=logger)
 
@@ -423,6 +439,11 @@ def main():
                         level=logging.INFO,
                         filename='./%s.log'%os.path.basename(args.infile),
                         filemode='w')
+
+    # leave it here plz :)
+    with open('./test.txt', 'wb') as f:
+        f.write(b"!!TEST!!")
+
     # define a Handler which writes INFO messages or higher to the sys.stderr
     console = logging.StreamHandler()
     console.setLevel(logging.INFO)
@@ -431,11 +452,11 @@ def main():
     # tell the handler to use this format
     console.setFormatter(formatter)
     logger = logging.getLogger("sn4ke")
-    # add the handler to the root logger
-    logger.addHandler(console)
-
+    
     if args.verbose:
         logger.setLevel(logging.DEBUG)
+        # add the handler to the root logger
+        logger.addHandler(console)
     elif not args.quiet:
         logger.setLevel(logging.INFO)
 
