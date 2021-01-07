@@ -28,10 +28,10 @@ from capstone import *
 from capstone.x86 import *
 
 def rewrite_functions(infile, logger=logging.Logger("null"), context=None, fname=None):
-    logger.info("Generating GTIRB IR...")
-    gtirb_protobuf(infile)
+    #logger.info("Generating GTIRB IR...")
+    #gtirb_protobuf(infile)
     logger.info("Loading IR... " + infile)
-    ir = IR.load_protobuf("%s.gtirb"%infile)
+    ir = IR.load_protobuf(infile)
 
     logger.info("Preparing IR for rewriting...")
     ctx = RewritingContext(ir) if context is None else context
@@ -304,6 +304,7 @@ def gtirb_protobuf(filename):
                     filename,
                     '--ir',
                     "%s.gtirb"%filename,
+                    '-j 4',
                     ]
     return subprocess.call(disasm_args)
 

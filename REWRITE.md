@@ -59,4 +59,3 @@ Compiler arguments: -o test /tmp/fileQtPVZl.s -lm -nostartfiles -pie
 ```  
 
 You should put these adjustments under [./myrewriter.py#compile_ir](./myrewriter.py#L184-L194) function. 
-
