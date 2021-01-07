@@ -1,0 +1,80 @@
+#!/usr/bin/env python
+
+import os, sys, subprocess, shutil, time, copy, fnmatch
+from collections import defaultdict
+import copy
+
+CWD = os.path.dirname(os.path.abspath(__file__))
+from bashUtil import executeCommand
+
+
+def mutate(compiler, ext, mutator, args, compiler_include_flags, src_indices):
+    new_args = copy.deepcopy(args)
+    for index in src_indices:
+        src_file = args[index]
+        cov_info = getCoverageInfo(src_file)
+
+        if not cov_info:
+            #print("no coverage info for the file: " + src_file + ", so assume wants to mutate all")
+            cov_info = "all"
+        command = mutator + " " + src_file + " -coverage_info=" +  cov_info + " -- " + " ".join(args) + ' -I'  + compiler_include_flags.strip()
+        #print("THE ACTUAL COMMAND IS: " + command)
+        out, err, my_time = executeCommand(command.split(), True)
+
+
+def getCoverageInfo(src_file):
+    #print("THE CURRENT DIRECTORY IS: " + os.getcwd())
+    file_name = os.path.basename(src_file) + ".cov"
+    cov_file = os.path.join(getSummaryDir(), "coverage")    # Assume only one big coverage file, because only one tool at a time
+    if not os.path.isfile(cov_file):
+        return ""
+    with open(cov_file, 'r') as in_file:
+        lines = in_file.readlines()
+    for line in lines:
+        file_name = line.split(":")[0]
+        if file_name != src_file:
+            continue
+        coverage = line.split(":")[1].strip(" ,\n")
+        return coverage;
+
+
+def getSummaryDir():
+    # make the summary directory if does not exist
+    # also makes the ir-coverage/ directory
+    #pk summaryDir = os.path.join(os.getenv("HOME"), ".srciror_fast")
+    summaryDir = CWD + '/../Examples_revng_fast/mutation_results/srciror/' 
+    if not os.path.exists(summaryDir):
+        os.makedirs(summaryDir)
+    return summaryDir
+
+
+def main():
+    llvm_bin_dir = os.environ["SRCIROR_LLVM_BIN"]
+    compiler_include_flags = os.environ["SRCIROR_LLVM_INCLUDES"] # Release+Asserts/lib/clang/3.8.0/include
+    # pk clang = os.path.join(llvm_bin_dir, 'clang')
+    clang = os.path.join('/home/pc-5/fi-bin/revng_dir/orchestra/root/bin/', 'clang') # pk: changed to the local installation
+    mutator = os.environ["SRCIROR_SRC_MUTATOR"] # path to build/mutator
+    args = sys.argv[1:]
+
+    if '-fstack-usage' in args: # TODO: What is -fstack-usage?
+        args.remove('-fstack-usage')
+    compiler = clang
+    #print('logging compile flags: ' + ' '.join(args))
+
+    # if the build system is checking for the version flags, we don't mess it up, just delegate to the compiler
+    if "--version" in args or "-V" in args:
+        out, err, my_time = executeCommand([compiler] + args, True)
+        return 1
+
+    # mutate
+    c_indices = [ i for i, word in enumerate(args) if word.endswith('.c')]  # Mutating only .c files
+    if c_indices:
+        ext = ".c"
+        mutate(compiler, ext, mutator, args, compiler_include_flags, c_indices)
+
+    #print('Looking to compile the original: ' + str([compiler] + args))
+    out, err, my_time = executeCommand([compiler] + args, True)
+    return 1
+
+if __name__ == '__main__':
+    main()

@@ -1,0 +1,88 @@
+#!/usr/bin/env python
+
+import os, sys, subprocess, shutil, time, copy, fnmatch
+from collections import defaultdict
+import copy
+import zlib
+
+CWD = os.path.dirname(os.path.abspath(__file__))
+from bashUtil import executeCommand
+from irUtil import getSummaryDir, run, run_ll
+
+def collectMutations(bitcode_file, src_file, opt_command, dummy):   # Using a dummy variable holder for last parameter for consistency
+    hash_code = zlib.adler32(bitcode_file + "+" + src_file) & 0xffffffff
+    command = opt_command + " -getBinaryOperators " + bitcode_file
+    #print("the current directory is: " + os.getcwd())
+    #print("collecting binops mutants with the command: " + command)
+    out1, err1, my_time1 = executeCommand(command.split())
+#    print("out1: ") # pk
+#    print(out1) # pk
+#    print("err1: ") # pk
+#    print(err1) # pk
+#    print("done") # pk
+
+    command = opt_command + " -getICRMutationLocs " + bitcode_file
+    #print("the current directory is: " + os.getcwd())
+    #print("collecting const mutants with the command: " + command)
+    ut2, err2, my_time2 = executeCommand(command.split())
+#    print("out2: ") # pk
+#    print(out2) # pk
+#    print("err2: ") # pk
+#    print(err2) # pk
+#    print("done") # pk
+
+    mutantsDir = os.path.join(getSummaryDir(), "bc-mutants")
+    if not os.path.exists(mutantsDir):
+        os.makedirs(mutantsDir)
+    with open(os.path.join(mutantsDir, str(hash_code)), 'w') as log_file:
+        for line in err1.split("\n"):
+            if line:
+                log_file.write("binaryOp:" + line + "\n")
+        for line in err2.split("\n"):
+            if line:
+                log_file.write("const:" + line + "\n")
+
+
+def collectMutations_ll(bitcode_file, inp_bc_file, opt_command, dummy):   # Using a dummy variable holder for last parameter for consistency
+    #print(bitcode_file)
+    #print(inp_bc_file)
+    hash_code = zlib.adler32(bitcode_file + "+" + inp_bc_file) & 0xffffffff
+    #print("****** hash code: " + str(hash_code)) # pk 
+    command = opt_command + " -getBinaryOperators " + inp_bc_file 
+    #print("the current directory is: " + os.getcwd())
+    #print("collecting binops mutants with the command: " + command)
+    out1, err1, my_time1 = executeCommand(command.split())
+#    print("out1: ") # pk
+#    print(out1) # pk
+#    print("err1: ") # pk
+#    print(err1) # pk
+#    print("done") # pk
+
+    command = opt_command + " -getICRMutationLocs " + inp_bc_file
+    #print("the current directory is: " + os.getcwd())
+    #print("collecting const mutants with the command: " + command)
+    out2, err2, my_time2 = executeCommand(command.split())
+#    print("out2: ") # pk
+#    print(out2) # pk
+#    print("err2: ") # pk
+#    print(err2) # pk
+#    print("done") # pk
+
+    mutantsDir = os.path.join(getSummaryDir(), "bc-mutants")
+    if not os.path.exists(mutantsDir):
+        os.makedirs(mutantsDir)
+    with open(os.path.join(mutantsDir, str(hash_code)), 'w') as log_file:
+        for line in err1.split("\n"):
+            if line:
+                log_file.write("binaryOp:" + line + "\n")
+        for line in err2.split("\n"):
+            if line:
+                log_file.write("const:" + line + "\n")
+
+
+def main():
+    #pk return run('mutation', collectMutations)
+    return run_ll('mutation', collectMutations_ll, 0)
+
+if __name__ == '__main__':
+    main()
