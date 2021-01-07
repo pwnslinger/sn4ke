@@ -1,0 +1,44 @@
+#!/usr/bin/env python
+
+import os, sys
+import zlib
+
+CWD = os.path.dirname(os.path.abspath(__file__))
+from bashUtil import executeCommand
+from irUtil import run
+from irUtil import run_ll
+
+
+def instrumentForCoverage(bitcode_file, src_file, opt_command, log_file):
+    hash_code = zlib.adler32(bitcode_file + "+" + src_file) & 0xffffffff    # Anding with 0xffffffff for Python compatibility issues
+    #print("****** hash code: " + str(hash_code)) # pk 
+    # pk command = opt_command + " -coverage " + bitcode_file + " -file_code=" + str(hash_code) + " -o " + bitcode_file
+    command = opt_command + " -coverage " + bitcode_file + " -file_code=" + str(hash_code) + " -S -o " + bitcode_file # pk
+    with open(log_file, 'a') as log_file:
+        log_file.write(bitcode_file + "+" + src_file + ":" + str(hash_code) + "\n")
+    #print("the current directory is: " + os.getcwd())
+    #print("instrumenting with the command: " + command)
+    executeCommand(command.split())
+
+def instrumentForCoverage_ll(bitcode_file, inp_bc_file, opt_command, log_file):
+    #print(bitcode_file)
+    #print(inp_bc_file)
+    hash_code = zlib.adler32(bitcode_file + "+" + inp_bc_file) & 0xffffffff    # Anding with 0xffffffff for Python compatibility issues
+    #print("****** hash code: " + str(hash_code)) # pk 
+    # pk command = opt_command + " -coverage " + bitcode_file + " -file_code=" + str(hash_code) + " -o " + bitcode_file
+    command = opt_command + " -coverage " + inp_bc_file + " -file_code=" + str(hash_code) + " -S -o " + bitcode_file # pk
+    with open(log_file, 'a') as log_file:
+        log_file.write(bitcode_file + "+" + inp_bc_file + ":" + str(hash_code) + "\n")
+    #print("the current directory is: " + os.getcwd())
+    #print("instrumenting with the command: " + command)
+    executeCommand(command.split())
+
+
+
+def main():
+    return run_ll('coverage', instrumentForCoverage_ll, 0)
+    #pk return run('coverage', instrumentForCoverage)
+
+
+if __name__ == '__main__':
+    main()
