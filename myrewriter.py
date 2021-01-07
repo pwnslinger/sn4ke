@@ -22,6 +22,7 @@ import logging
 import subprocess
 from gtirb_functions import Function
 from gtirb_capstone import RewritingContext
+from gtirb_capstone.instructions import GtirbInstructionDecoder
 from gtirb import IR
 from tqdm import tqdm
 from capstone import *
@@ -194,19 +195,23 @@ def compile_ir(fname, logger=logging.Logger("null")):
         "-c",
         "-nostartfiles",
     ]
-    p = subprocess.Popen(args_pp, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    p.communicate()
+    p = subprocess.Popen(args_pp, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    stdout, stderr = p.communicate()
+    logger.info(stderr)
 
     if p.returncode:
-        '''
-        relocation R_X86_64_8 against symbol `_init' can not be used when making a PIE object; recompile with -fPIC
-        I tracked this error and it comes from gtirb-pprinter@src/gtirb_pprinter/ElfBinaryPrinter.cpp#L105
-        // if DYN, pie. if EXEC, no-pie. if both, pie overrides no-pie. If none, do not specify either argument.
-        module.aux_data['binaryType']
-        AuxData(type_name='sequence<string>', data=['DYN'], )
-        '''
+        if 'main' in ir_out:
+            #import ipdb; ipdb.set_trace()
+            pass
+    '''
+    relocation R_X86_64_8 against symbol `_init' can not be used when making a PIE object; recompile with -fPIC
+    I tracked this error and it comes from gtirb-pprinter@src/gtirb_pprinter/ElfBinaryPrinter.cpp#L105
+    // if DYN, pie. if EXEC, no-pie. if both, pie overrides no-pie. If none, do not specify either argument.
+    module.aux_data['binaryType']
+    AuxData(type_name='sequence<string>', data=['DYN'], )
+    '''
 
-        os.remove(ir_out)
+    #    os.remove(ir_out)
 
     # takes a lot of space and we probably wont need them..
     os.unlink(ir_out)
@@ -228,6 +233,10 @@ def build_mutation(block, ctx, insn, offset, group_name, fname, encoding, count,
         if block.offset == b.offset:
             block_ = b
 
+    if 'logicOp' in group_name:
+        #import ipdb; ipdb.set_trace()
+        pass
+
     if ins_sz < count:
         ctx_.modify_block(block_, encoding, offset, True, count-ins_sz, logger=logger)
     
@@ -237,8 +246,9 @@ def build_mutation(block, ctx, insn, offset, group_name, fname, encoding, count,
 
     mutation_name = gen_name(ctx.ir.modules[0].name, fname, group_name, offset, insn.mnemonic, repl, logger=logger)
 
+    
     # saving resulting ir
-    save_ir(ctx, mutation_name, logger=logger)
+    save_ir(ctx_, mutation_name, logger=logger)
 
     # compile ir
     compile_ir(mutation_name, logger=logger)
@@ -274,7 +284,7 @@ def mutation(block, ctx, insn, offset, group_name, fname, group=None, logger=log
                 continue
 
             logger.info("\nReplacing %s with %s"% (str(insn), asm))
-            build_mutation(block, ctx, insn, offset, group_name, fname, encoding, count, group[i], logger=logging.Logger("null"))
+            build_mutation(block, ctx, insn, offset, group_name, fname, encoding, count, group[i], logger=logger)
     else:
         # handle nop cases : skip instruction
         if group_name == "nopOp":
@@ -286,7 +296,7 @@ def mutation(block, ctx, insn, offset, group_name, fname, group=None, logger=log
                 return
 
             logger.info("\nReplacing %s with %s"% (str(insn), asm))
-            build_mutation(block, ctx, insn, offset, group_name, fname, encoding, count, "nop", logger=logging.Logger("null"))
+            build_mutation(block, ctx, insn, offset, group_name, fname, encoding, count, "nop", logger=logger)
         # handle jump case only - taken branch
         elif group_name == "brOp":
             if insn.id == X86_INS_JMP:
@@ -299,7 +309,7 @@ def mutation(block, ctx, insn, offset, group_name, fname, group=None, logger=log
                 return
 
             logger.info("\nReplacing %s with %s"% (str(insn), asm))
-            build_mutation(block, ctx, insn, offset, group_name, fname, encoding, count, "jmp", logger=logging.Logger("null"))
+            build_mutation(block, ctx, insn, offset, group_name, fname, encoding, count, "jmp", logger=logger)
 
 def gtirb_protobuf(filename):
     disasm_args = ['ddisasm',
@@ -351,7 +361,8 @@ def rewrite_function(module, func, ctx, logger=logging.Logger("null")):
         bytes = b.byte_interval.contents[b.offset : b.offset + b.size]
         offset = 0
 
-        for i in ctx.cp.disasm(bytes, offset):
+        #for i in ctx.cp.disasm(bytes, offset):
+        for i in tuple(GtirbInstructionDecoder(module.isa).get_instructions(b)):
             # mutation on jump instructions 
             if i.group(CS_GRP_JUMP):
                 #if i.id in insn_branch.keys():
@@ -408,7 +419,7 @@ def rewrite_function(module, func, ctx, logger=logging.Logger("null")):
                         
                         logger.info("\nReplacing %s with %s"% (str(i), asm))
                         
-                        build_mutation(b, ctx, i, offset, "constOp", fname, encoding, count, 'imm:%s'%const, logger=logging.Logger("null"))
+                        build_mutation(b, ctx, i, offset, "constOp", fname, encoding, count, 'imm:%s'%const, logger=logger)
                         
             if i.id in insn_logic.keys():
                 # swapping operators
@@ -464,7 +475,7 @@ def main():
         logger.setLevel(logging.INFO)
 
     logger.info("Rewriting stuff...")
-    rewrite_functions(args.infile, logger=logger)
+    rewrite_functions(args.infile, logger=logger, fname='main')
 
     return 0
 
