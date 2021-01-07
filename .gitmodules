@@ -6,3 +6,7 @@
 	path = gtirb-functions
 	url = https://github.com/GrammaTech/gtirb-functions.git
 	branch = master
+[submodule "capstone"]
+	path = capstone
+	url = https://github.com/aquynh/capstone.git
+	branch = master
