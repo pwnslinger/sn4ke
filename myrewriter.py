@@ -180,6 +180,7 @@ def compile_ir(fname, logger=logging.Logger("null")):
         os.makedirs(bin_dir)
     ir_out = os.path.join('./results/%s/ir/%s'%(basename, fname + ".gtirb"))
     bin_out = os.path.join(bin_dir, fname)
+    
     args_pp = [
         "gtirb-pprinter",
         ir_out,
@@ -193,7 +194,8 @@ def compile_ir(fname, logger=logging.Logger("null")):
         "-c",
         "-nostartfiles",
     ]
-    p = subprocess.Popen(args_pp, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+    p = subprocess.Popen(args_pp, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    p.communicate()
 
     if p.returncode:
         '''
@@ -207,7 +209,7 @@ def compile_ir(fname, logger=logging.Logger("null")):
         os.remove(ir_out)
 
     # takes a lot of space and we probably wont need them..
-    #os.unlink(ir_out)
+    os.unlink(ir_out)
 
 def log(bin_name, text):
     log_path = './results/%s/failed.txt'%bin_name
