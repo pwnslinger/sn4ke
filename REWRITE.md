@@ -56,5 +56,5 @@ Compiler arguments: -o test /tmp/fileQtPVZl.s -lm -nostartfiles -pie
 /usr/bin/ld: error in /tmp/cc4CSqVs.o(.eh_frame); no .eh_frame_hdr table will be created.
 ```  
 
-You should put these adjustments under [./myrewriter.py#compile_ir](./myrewriter.py) function. 
+You should put these adjustments under [./myrewriter.py#compile_ir](./myrewriter.py#L184-L194) function. 
 
