@@ -12,6 +12,12 @@
     cd gtirb-capstone
     pip install .
     ```
+5. Install the following sub-modules:  
+    * Capstone
+    * Gtirb-capstone
+    * Gtirb-functions
+    * Gtirb-pprinter
+    * Keystone
 
 # Run
 All originals binaries are located under [`./tests`](./tests) directory. For mutation you just need to pass the binary like the following: 
