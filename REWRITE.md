@@ -5,7 +5,7 @@
 `git clone --recurse-submodules --depth 1 https://github.com/pwnslinger/sn4ke.git`
 2.  Activate the virtual env:  
 `. ./venv/bin/activate`  
-3. Install `ddisasm`:  
+3. For `ddisasm` installtion please follow the instruction from their [README.md](https://github.com/GrammaTech/ddisasm):  
 `sudo apt-get install ddisasm`
 4. Please install the added submodules using pip:  
     ```
