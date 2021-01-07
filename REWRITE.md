@@ -16,7 +16,34 @@
 # Run
 All originals binaries are located under [`./tests`](./tests) directory. For mutation you just need to pass the binary like the following: 
 
-`time ipython --pdb myrewriter.py tests/bzip2_base.amd64-m64-gcc42-nn`
+`time ipython --pdb myrewriter.py tests/bzip2_base.amd64-m64-gcc42-nn.gtirb`
+
+You can find the mutation results under the `./results/bzip2_base.amd64-m64-gcc42-nn/bin/` directory. 
+
+```
+$> ls -lah results/bzip2_base.amd64-m64-gcc42-nn/bin | head -n 20
+total 497M
+drwxr-xr-x 2 pwnslinger pwnslinger 780K Jan  6 16:18 .
+drwxr-xr-x 4 pwnslinger pwnslinger 4.0K Jan  6 12:34 ..
+-rwxr-xr-x 1 pwnslinger pwnslinger  68K Jan  6 12:36 bzip2_base.amd64-m64-gcc42-nn:bsPutUInt32:arithOp:5:shr:add
+-rwxr-xr-x 1 pwnslinger pwnslinger  68K Jan  6 12:36 bzip2_base.amd64-m64-gcc42-nn:bsPutUInt32:arithOp:5:shr:rol
+-rwxr-xr-x 1 pwnslinger pwnslinger  68K Jan  6 12:36 bzip2_base.amd64-m64-gcc42-nn:bsPutUInt32:arithOp:5:shr:ror
+-rwxr-xr-x 1 pwnslinger pwnslinger  68K Jan  6 12:36 bzip2_base.amd64-m64-gcc42-nn:bsPutUInt32:arithOp:5:shr:shl
+-rwxr-xr-x 1 pwnslinger pwnslinger  68K Jan  6 12:36 bzip2_base.amd64-m64-gcc42-nn:bsPutUInt32:arithOp:5:shr:sub
+-rwxr-xr-x 1 pwnslinger pwnslinger  68K Jan  6 12:36 bzip2_base.amd64-m64-gcc42-nn:bsPutUInt32:arithOp:7:shr:add
+-rwxr-xr-x 1 pwnslinger pwnslinger  68K Jan  6 12:36 bzip2_base.amd64-m64-gcc42-nn:bsPutUInt32:arithOp:7:shr:rol
+-rwxr-xr-x 1 pwnslinger pwnslinger  68K Jan  6 12:36 bzip2_base.amd64-m64-gcc42-nn:bsPutUInt32:arithOp:7:shr:ror
+-rwxr-xr-x 1 pwnslinger pwnslinger  68K Jan  6 12:36 bzip2_base.amd64-m64-gcc42-nn:bsPutUInt32:arithOp:7:shr:shl
+-rwxr-xr-x 1 pwnslinger pwnslinger  68K Jan  6 12:36 bzip2_base.amd64-m64-gcc42-nn:bsPutUInt32:arithOp:7:shr:sub
+-rwxr-xr-x 1 pwnslinger pwnslinger  68K Jan  6 12:35 bzip2_base.amd64-m64-gcc42-nn:bsPutUInt32:brOp:9:jmp:ja
+-rwxr-xr-x 1 pwnslinger pwnslinger  68K Jan  6 12:35 bzip2_base.amd64-m64-gcc42-nn:bsPutUInt32:brOp:9:jmp:jae
+-rwxr-xr-x 1 pwnslinger pwnslinger  68K Jan  6 12:35 bzip2_base.amd64-m64-gcc42-nn:bsPutUInt32:brOp:9:jmp:jb
+-rwxr-xr-x 1 pwnslinger pwnslinger  68K Jan  6 12:35 bzip2_base.amd64-m64-gcc42-nn:bsPutUInt32:brOp:9:jmp:jbe
+-rwxr-xr-x 1 pwnslinger pwnslinger  68K Jan  6 12:35 bzip2_base.amd64-m64-gcc42-nn:bsPutUInt32:brOp:9:jmp:je
+-rwxr-xr-x 1 pwnslinger pwnslinger  68K Jan  6 12:35 bzip2_base.amd64-m64-gcc42-nn:bsPutUInt32:brOp:9:jmp:jecxz
+-rwxr-xr-x 1 pwnslinger pwnslinger  68K Jan  6 12:35 bzip2_base.amd64-m64-gcc42-nn:bsPutUInt32:brOp:9:jmp:jg
+
+```
 
 
 # Adjustments
