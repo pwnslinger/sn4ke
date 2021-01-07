@@ -3,8 +3,13 @@
 # Install
 1. Clone the github repository including the sub-modules using the following command:  
 `git clone --recurse-submodules --depth 1 git@github.com:pwnslinger/sn4ke.git`
-2. You don't need to install any virtualenv or pip packages. All the necessary ones are located under ./venv. Just source it!  
+2.  Activate the virtual env:  
 `. ./venv/bin/activate`  
+3. Please install the added submodules using pip:  
+    ```
+    cd gtirb-capstone
+    pip install .
+    ```
 
 # Run
 All originals binaries are located under [`./tests`](./tests) directory. For mutation you just need to pass the binary like the following: 
