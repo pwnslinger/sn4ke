@@ -5,7 +5,9 @@
 `git clone --recurse-submodules --depth 1 https://github.com/pwnslinger/sn4ke.git`
 2.  Activate the virtual env:  
 `. ./venv/bin/activate`  
-3. Please install the added submodules using pip:  
+3. Install `ddisasm`:  
+`sudo apt-get install ddisasm`
+4. Please install the added submodules using pip:  
     ```
     cd gtirb-capstone
     pip install .
