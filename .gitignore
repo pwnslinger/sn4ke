@@ -1,2 +1,8 @@
 .vscode/*
 ./tests/*.gtirb
+*.log
+*.txt
+spec_2006_64_bit_original/*
+*.gtirb
+./results/*
+results/*
