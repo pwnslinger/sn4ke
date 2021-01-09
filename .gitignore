@@ -6,3 +6,4 @@ spec_2006_64_bit_original/*
 *.gtirb
 ./results/*
 results/*
+venv/*
