@@ -18,3 +18,7 @@
 	path = gtirb-pprinter
 	url = https://github.com/GrammaTech/gtirb-pprinter.git
 	branch = master
+[submodule "gtirb"]
+	path = gtirb
+	url = https://github.com/GrammaTech/gtirb.git
+	branch = master
