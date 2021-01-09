@@ -2,7 +2,7 @@
 
 # Install
 1. Clone the github repository including the sub-modules using the following command:  
-`git clone --recurse-submodules --depth 1 https://github.com/pwnslinger/sn4ke.git`
+`git clone --recurse-submodules --depth 1 -b wip/random_mutation https://github.com/pwnslinger/sn4ke.git`
 2.  Activate the virtual env:  
 `. ./venv/bin/activate`  
 3. For `ddisasm` installtion please follow the instruction from their [README.md](https://github.com/GrammaTech/ddisasm):  
