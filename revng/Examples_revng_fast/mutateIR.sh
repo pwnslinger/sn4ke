@@ -93,9 +93,9 @@ then
     mkdir ./mutation_results/ll/
     mkdir ./mutation_results/bin/
     python $CURR_DIR/generateMutationRequests.py --testName ${TEST}_lifted.ll 
-    python $CURR_DIR/../PythonWrappers_revng_fast/irVanillaClang ${TEST}_lifted.ll -o $TEST
+    python3 $CURR_DIR/../PythonWrappers_revng_fast/irVanillaClang ${TEST}_lifted.ll -o $TEST
   else
-    python $CURR_DIR/../PythonWrappers_revng_fast/irVanillaClang ${TEST}_lifted.ll -o $TEST
+    python3 $CURR_DIR/../PythonWrappers_revng_fast/irVanillaClang ${TEST}_lifted.ll -o $TEST
   fi
 fi
 

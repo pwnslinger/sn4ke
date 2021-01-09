@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import os, sys
+from tqdm import tqdm
 
 CWD = os.path.dirname(os.path.abspath(__file__))
 from bashUtil import executeCommand
@@ -101,7 +102,8 @@ def mutateIfRequested_ll(bitcode_file, inp_bc_file, opt_command, dummy):  # Usin
     if os.path.isfile(path):
         #print("yes we found the file")
         with open(path, 'r') as mut_file:
-            for linenum, line in enumerate(mut_file):
+           #tmp for linenum, line in enumerate(mut_file):
+            for linenum, line in tqdm(enumerate(mut_file), desc="Loop over mutations"):
                 mutation = line.strip()
                 #print("requested mutation is: " + mutation)
                 if not mutation:
@@ -112,7 +114,7 @@ def mutateIfRequested_ll(bitcode_file, inp_bc_file, opt_command, dummy):  # Usin
                 if bitcode_file != files[0] or inp_bc_file != files[1]:
                     #print("oh no, no mutation requested for bitcode: " + bitcode_file + " and the src file: " + inp_bc_file + ", reading " + files[0] + " and " + files[1])
                     return
-                print("MUTATING request {} for file {}...".format(linenum, bitcode_file))
+#tmp                print("MUTATING request {} for file {}...".format(linenum, bitcode_file))
                 mutation_type = mutation_parts[1]
                 actual_mutation = ":".join(mutation_parts[2:])
                 info = actual_mutation.split(':')

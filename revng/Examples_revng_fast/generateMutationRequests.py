@@ -1,6 +1,8 @@
 import argparse
 import os
 from os.path import expanduser
+import random
+
 CWD = os.path.dirname(os.path.abspath(__file__))
 HOME = expanduser("~")
 
@@ -21,6 +23,8 @@ def parseLines (testName):
                 #print(hash_value)
                 #print(line)
 
+	req = []
+	req_num = 0 
     #with open(HOME+'/.srciror_fast/bc-mutants/'+hash_value, 'r') as mutations:
     i = 0 # for debugging
     with open(CWD+'/mutation_results/srciror/bc-mutants/'+hash_value, 'r') as mutations:
@@ -41,20 +45,31 @@ def parseLines (testName):
                 #print(op_type)
                 #print(values)
                 for value in values:
+                    req_num = req_num + 1
+                    mut = file_name + ':' + mutation_type + ':' + inst_count + ':' + op_type + ':' + value + '\n'
+                    req.append(mut)
                     #with open(HOME+"/.srciror_fast/mutation_requests.txt", "a+") as mutation_req:
-                    with open(CWD+"/mutation_results/srciror/mutation_requests.txt", "a+") as mutation_req:
-                        mutation_req.write(file_name + ':' + mutation_type + ':' + inst_count + ':' + op_type + ':' + value + '\n')
+#tmp                    with open(CWD+"/mutation_results/srciror/mutation_requests.txt", "a+") as mutation_req:
+   #tmp                     mutation_req.write(file_name + ':' + mutation_type + ':' + inst_count + ':' + op_type + ':' + value + '\n')
             elif mutation_type == 'const':
                 inst_count = parts[1]
                 op_count = parts[2]
                 extra = parts[3]
                 values = parts[4].strip().split(',')[:-1]
                 for value in values:
+                    req_num = req_num + 1
+                    mut = file_name + ':' + mutation_type + ':' + inst_count + ':' + op_count + ':' + extra + ':' + value + '\n'
+                    req.append(mut)
                     #with open(HOME+"/.srciror_fast/mutation_requests.txt", "a+") as mutation_req:
-                    with open(CWD+"/mutation_results/srciror/mutation_requests.txt", "a+") as mutation_req:
-                        mutation_req.write(file_name + ':' + mutation_type + ':' + inst_count + ':' + op_count + ':' + extra + ':' + value + '\n')
+                    #with open(HOME+"/.srciror_fast/mutation_requests.txt", "a+") as mutation_req:
+      #tmp              with open(CWD+"/mutation_results/srciror/mutation_requests.txt", "a+") as mutation_req:
+         #tmp               mutation_req.write(file_name + ':' + mutation_type + ':' + inst_count + ':' + op_count + ':' + extra + ':' + value + '\n')
             
+    if req_num > 1000:
+        req = random.sample(req, 1000)
 
+    with open(CWD+"/mutation_results/srciror/mutation_requests.txt", "a+") as mutation_req:
+        mutation_req.writelines(req)
 
 
 if __name__=="__main__":
