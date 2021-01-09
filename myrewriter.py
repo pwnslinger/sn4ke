@@ -43,9 +43,51 @@ def rewrite_functions(infile, logger=logging.Logger("null"), context=None, fname
         functions = Function.build_functions(m)
         print("%d functions in binary" % (len(functions)))
         for f in tqdm(functions, desc="Loop over functions"):
+
             #print("fname %s" %(f.get_name()))
             if fname == None or fname == f.get_name():
                 rewrite_function(m, f, ctx, logger=logger)
+    
+    total_mutations = len(mutation_list)
+    logger.info("#%s unique mutantion patterns found..."%str(total_mutations))
+    print("#%s unique mutantion patterns found..."%str(total_mutations))
+    
+    i = 0
+    f = 0
+    RANDOM_SAMPLING = 1000
+
+    logger.info("Randomly selecting %s non-trivial compileable mutants..."%str(RANDOM_SAMPLING))
+
+    selected_mutants = []
+
+    pbar = tqdm(total=RANDOM_SAMPLING, desc="Build Progress..")
+
+    while len(selected_mutants) < RANDOM_SAMPLING+1:
+        # prevent infinite loop if we ran our of non-trivial compile-able mutant samples
+        if len(mutation_list) == 0:
+            break
+        m = random.choice(mutation_list)
+        # if there is any weird case of name duplication, continue
+        if str(m) in selected_mutants:
+            mutation_list.remove(m)
+            continue
+        pbar.set_description_str(f'Current mutation: {str(m)}')
+        if m.build(ctx, logger):
+            i +=1
+            selected_mutants.append(str(m))
+            # prevent duplication of mutants in list
+            mutation_list.remove(m)
+            if not i%10:
+                pbar.update(i)
+        else:
+            # we dont wanna iterate over the failed ones again
+            f += 1
+            mutation_list.remove(m)
+    pbar.close()
+
+    logger.info("------------[ Statistics ]------------")
+    logger.info("%s%% of mutants couldn't pass either compilation or trivial test."%str(round((f/total_mutations)*100, 2)))
+    print("%s%% of mutants couldn't pass either compilation or trivial test."%str(round((f/total_mutations)*100, 2)))
 
 def myshow_byteinterval_asm(ctx, byte_interval, logger=logging.Logger("null")):
     """Disassemble and print the contents of a code block."""
@@ -155,7 +197,7 @@ def trivial_test(filename:str, timeout=2) -> bool:
         # success run output
         proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
         try:
-            _, stderr = proc.communicate(input=b'\n', timeout=timeout)
+            _, stderr = proc.communicate(input=b'\n\n', timeout=timeout)
         except subprocess.TimeoutExpired:
             return False
         if stderr:
@@ -163,7 +205,6 @@ def trivial_test(filename:str, timeout=2) -> bool:
             if proc.returncode - 128 == signal.SIGSEGV:
                 status = False
                 break
-    #os.unlink('./test.txt')
     return status
 
 def save_ir(ctx, fname, logger=logging.Logger("null")):
@@ -177,11 +218,20 @@ def save_ir(ctx, fname, logger=logging.Logger("null")):
     logger.info("Done.")
 
 def compile_ir(fname, logger=logging.Logger("null")):
+    '''
+    relocation R_X86_64_8 against symbol `_init' can not be used when making a PIE object; recompile with -fPIC
+    I tracked this error and it comes from gtirb-pprinter@src/gtirb_pprinter/ElfBinaryPrinter.cpp#L105
+    // if DYN, pie. if EXEC, no-pie. if both, pie overrides no-pie. If none, do not specify either argument.
+    module.aux_data['binaryType']
+    AuxData(type_name='sequence<string>', data=['DYN'], )
+    '''
     logger.info("Rebuild the mutation...")
     basename = fname.split(':')[0]
     bin_dir = './results/%s/bin'%basename
+
     if not os.path.exists(bin_dir):
         os.makedirs(bin_dir)
+
     ir_out = os.path.join('./results/%s/ir/%s'%(basename, fname + ".gtirb"))
     bin_out = os.path.join(bin_dir, fname)
     
@@ -199,30 +249,85 @@ def compile_ir(fname, logger=logging.Logger("null")):
         "-nostartfiles",
     ]
     p = subprocess.Popen(args_pp, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    stdout, stderr = p.communicate()
+    _, stderr = p.communicate()
     logger.info(stderr)
-
-    if p.returncode:
-        if 'main' in ir_out:
-            #import ipdb; ipdb.set_trace()
-            pass
-    '''
-    relocation R_X86_64_8 against symbol `_init' can not be used when making a PIE object; recompile with -fPIC
-    I tracked this error and it comes from gtirb-pprinter@src/gtirb_pprinter/ElfBinaryPrinter.cpp#L105
-    // if DYN, pie. if EXEC, no-pie. if both, pie overrides no-pie. If none, do not specify either argument.
-    module.aux_data['binaryType']
-    AuxData(type_name='sequence<string>', data=['DYN'], )
-    '''
-
-    #    os.remove(ir_out)
 
     # takes a lot of space and we probably wont need them..
     os.unlink(ir_out)
+
+    if p.returncode:
+        return False
+    else:
+        return True    
 
 def log(bin_name, text):
     log_path = './results/%s/failed.txt'%bin_name
     with open(log_path, 'a+') as f:
         f.write(text)
+
+class Instruction(object):
+    def __init__(self, insn_str, encoding, insn_sz):
+        self._insn_str = insn_str
+        self._encoding = encoding
+        self._insn_sz = insn_sz
+
+    @property
+    def insn_str(self):
+        return self._insn_str
+
+    @property
+    def encoding(self):
+        return self._encoding
+
+    @property
+    def insn_sz(self):
+        return self._insn_sz
+
+class Mutation(object):
+    def __init__(self, mname, fname, block, insn, offset, category, instruction):
+        self._mname = mname
+        self._fname = fname
+        self._block = block
+        self._insn = insn
+        self._offset = offset
+        self._cat = category
+        self._repl = instruction
+
+    @property
+    def mname(self):
+        return self._mname
+    
+    @property
+    def fname(self):
+        return self._fname
+
+    @property
+    def block(self):
+        return self._block
+
+    @property
+    def insn(self):
+        return self._insn
+
+    @property
+    def offset(self):
+        return self._offset
+    
+    @property
+    def cat(self):
+        return self._cat
+
+    @property
+    def repl(self):
+        return self._repl
+
+    def build(self, ctx, logger=logging.Logger("null")):
+        return build_mutation(self._block, ctx, self._insn, self._offset, self._cat, self._fname, \
+                    self._repl.encoding, self._repl.insn_sz, self._repl.insn_str, logger=logger)
+    
+    def __str__(self):
+        return gen_name(self._mname, self._fname, self._cat, self._offset, self._insn.mnemonic, self._repl.insn_str)
+    
 
 def build_mutation(block, ctx, insn, offset, group_name, fname, encoding, count, repl, logger=logging.Logger("null")):
     
@@ -235,10 +340,6 @@ def build_mutation(block, ctx, insn, offset, group_name, fname, encoding, count,
     for b in ctx_.ir.code_blocks:
         if block.offset == b.offset:
             block_ = b
-
-    if 'logicOp' in group_name:
-        #import ipdb; ipdb.set_trace()
-        pass
 
     if ins_sz < count:
         ctx_.modify_block(block_, encoding, offset, True, count-ins_sz, logger=logger)
@@ -254,7 +355,8 @@ def build_mutation(block, ctx, insn, offset, group_name, fname, encoding, count,
     save_ir(ctx_, mutation_name, logger=logger)
 
     # compile ir
-    compile_ir(mutation_name, logger=logger)
+    if not compile_ir(mutation_name, logger=logger):
+        return False
 
     # trivial test
     bin_path = './results/%s/bin/%s'%(ctx.ir.modules[0].name, mutation_name)
@@ -264,7 +366,11 @@ def build_mutation(block, ctx, insn, offset, group_name, fname, encoding, count,
         logger.info('Trivial Test: Failed, filename = %s'%mutation_name)
         log(ctx.ir.modules[0].name, '%s\n'%mutation_name)
         os.unlink(bin_path)
+        return False
+    
+    return True
 
+mutation_list = []
 
 def mutation(block, ctx, insn, offset, group_name, fname, group=None, logger=logging.Logger("null")):
     if group is not None:
@@ -287,7 +393,10 @@ def mutation(block, ctx, insn, offset, group_name, fname, group=None, logger=log
                 continue
 
             logger.info("\nReplacing %s with %s"% (str(insn), asm))
-            build_mutation(block, ctx, insn, offset, group_name, fname, encoding, count, group[i], logger=logger)
+            instruction = Instruction(group[i], encoding, count)
+            m = Mutation(ctx.ir.modules[0].name, fname, block, insn, offset, group_name, instruction)
+            mutation_list.append(m)
+            #build_mutation(block, ctx, insn, offset, group_name, fname, encoding, count, group[i], logger=logger)
     else:
         # handle nop cases : skip instruction
         if group_name == "nopOp":
@@ -299,7 +408,10 @@ def mutation(block, ctx, insn, offset, group_name, fname, group=None, logger=log
                 return
 
             logger.info("\nReplacing %s with %s"% (str(insn), asm))
-            build_mutation(block, ctx, insn, offset, group_name, fname, encoding, count, "nop", logger=logger)
+            instruction = Instruction('nop', encoding, count)
+            m = Mutation(ctx.ir.modules[0].name, fname, block, insn, offset, group_name, instruction)
+            mutation_list.append(m)
+            #build_mutation(block, ctx, insn, offset, group_name, fname, encoding, count, "nop", logger=logger)
         # handle jump case only - taken branch
         elif group_name == "brOp":
             if insn.id == X86_INS_JMP:
@@ -312,7 +424,10 @@ def mutation(block, ctx, insn, offset, group_name, fname, group=None, logger=log
                 return
 
             logger.info("\nReplacing %s with %s"% (str(insn), asm))
-            build_mutation(block, ctx, insn, offset, group_name, fname, encoding, count, "jmp", logger=logger)
+            instruction = Instruction('jmp', encoding, count)
+            m = Mutation(ctx.ir.modules[0].name, fname, block, insn, offset, group_name, instruction)
+            mutation_list.append(m)
+            #build_mutation(block, ctx, insn, offset, group_name, fname, encoding, count, "jmp", logger=logger)
 
 def gtirb_protobuf(filename):
     disasm_args = ['ddisasm',
@@ -322,37 +437,6 @@ def gtirb_protobuf(filename):
                     '-j 4',
                     ]
     return subprocess.call(disasm_args)
-
-def mutation_rewrite(module, ctx, block, asm, insn, offset, repl, logger=logging.Logger("null")):
-    # convert to byte using keystone
-    # use ks_wrapper cuz sometimes ks gets crazy!
-    #encoding, _ = ctx.ks.asm(asm)
-    encoding, _ = ks_wrapper(asm)
-
-    # apply mutation on byteinterval
-    ctx.modify_block(module, block, encoding, offset, logger=logger)
-
-    mutation_name = gen_name(module.name, "brOp", offset, insn.mnemonic, repl, logger=logger)
-
-    # saving resulting ir
-    save_ir(ctx, mutation_name, logger=logger)
-
-    # compile ir
-    compile_ir(mutation_name, logger=logger)
-    
-
-def branch_mutator(module, ctx, block, insn, offset, logger=logging.Logger("null")):
-
-    # once go through fall-through
-    if insn.id != X86_INS_JMP:
-        imm_val = insn.op_str
-        asm = "%s %s;"% ("jmp", imm_val)
-        mutation_rewrite(module, ctx, block, asm, insn, offset, "jmp", logger)
-
-    # nop instruction
-    n_bytes = insn.size
-    asm = "nop;"*n_bytes
-    mutation_rewrite(module, ctx, block, asm, insn, offset, "nop", logger)
 
 def rewrite_function(module, func, ctx, logger=logging.Logger("null")):
     logger.info("\nRewriting function: %s" % func.get_name())
@@ -421,8 +505,10 @@ def rewrite_function(module, func, ctx, logger=logging.Logger("null")):
                             continue
                         
                         logger.info("\nReplacing %s with %s"% (str(i), asm))
-                        
-                        build_mutation(b, ctx, i, offset, "constOp", fname, encoding, count, 'imm:%s'%const, logger=logger)
+                        instruction = Instruction('imm:%s'%const, encoding, count)
+                        m = Mutation(module.name, fname, b, i, offset, 'constOp', instruction)
+                        mutation_list.append(m)
+                        #build_mutation(b, ctx, i, offset, "constOp", fname, encoding, count, 'imm:%s'%const, logger=logger)
                         
             if i.id in insn_logic.keys():
                 # swapping operators
@@ -445,6 +531,7 @@ def main():
         description="Binrary mutation using GTIRB"
     )
     ap.add_argument("infile")
+    ap.add_argument("--fname", default=None)
     ap.add_argument(
         "-v", "--verbose", action="store_true", help="Verbose output"
     )
@@ -478,7 +565,8 @@ def main():
         logger.setLevel(logging.INFO)
 
     logger.info("Rewriting stuff...")
-    rewrite_functions(args.infile, logger=logger, fname='main')
+
+    rewrite_functions(args.infile, logger=logger, fname=args.fname)
 
     return 0
 
