@@ -24,7 +24,8 @@ from gtirb_functions import Function
 from gtirb_capstone import RewritingContext
 from gtirb_capstone.instructions import GtirbInstructionDecoder
 from gtirb import IR
-from tqdm import tqdm
+from tqdm import tqdm, trange
+from colorama import Fore
 from capstone import *
 from capstone.x86 import *
 
@@ -42,9 +43,9 @@ def rewrite_functions(infile, logger=logging.Logger("null"), context=None, fname
     for m in ctx.ir.modules:
         functions = Function.build_functions(m)
         print("%d functions in binary" % (len(functions)))
-        for f in tqdm(functions, desc="Loop over functions"):
-
-            #print("fname %s" %(f.get_name()))
+        bar = tqdm(functions, desc="Loop over functions", bar_format="{l_bar}%s{bar}%s{r_bar}" % (Fore.YELLOW, Fore.RESET))
+        for f in bar:
+            bar.set_description_str(f'Current function: {f.get_name()}')
             if fname == None or fname == f.get_name():
                 rewrite_function(m, f, ctx, logger=logger)
     
@@ -52,7 +53,6 @@ def rewrite_functions(infile, logger=logging.Logger("null"), context=None, fname
     logger.info("#%s unique mutantion patterns found..."%str(total_mutations))
     print("#%s unique mutantion patterns found..."%str(total_mutations))
     
-    i = 0
     f = 0
     RANDOM_SAMPLING = 1000
 
@@ -60,7 +60,7 @@ def rewrite_functions(infile, logger=logging.Logger("null"), context=None, fname
 
     selected_mutants = []
 
-    pbar = tqdm(total=RANDOM_SAMPLING, desc="Build Progress..")
+    pbar = tqdm(total=RANDOM_SAMPLING, desc="Build Progress..", bar_format="{l_bar}%s{bar}%s{r_bar}" % (Fore.GREEN, Fore.RESET))
 
     while len(selected_mutants) < RANDOM_SAMPLING:
         # prevent infinite loop if we ran our of non-trivial compile-able mutant samples
@@ -73,12 +73,9 @@ def rewrite_functions(infile, logger=logging.Logger("null"), context=None, fname
             continue
         pbar.set_description_str(f'Current mutation: {str(m)}')
         if m.build(ctx, logger):
-            #i +=1
             selected_mutants.append(str(m))
             # prevent duplication of mutants in list
             mutation_list.remove(m)
-            #if not i%10:
-            #    pbar.update(i)
         else:
             # we dont wanna iterate over the failed ones again
             f += 1
@@ -446,7 +443,7 @@ def rewrite_function(module, func, ctx, logger=logging.Logger("null")):
     blocks = func.get_all_blocks()
     fname = func.get_name()
 
-    for b in tqdm(blocks, desc="Loop over blocks %s"%fname):
+    for b in blocks:
         bytes = b.byte_interval.contents[b.offset : b.offset + b.size]
         offset = 0
 

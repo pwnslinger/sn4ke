@@ -23,3 +23,4 @@ six==1.15.0
 tqdm==4.55.1
 traitlets==4.3.3
 wcwidth==0.2.5
+colorama==0.4.4
