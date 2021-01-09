@@ -62,7 +62,7 @@ def rewrite_functions(infile, logger=logging.Logger("null"), context=None, fname
 
     pbar = tqdm(total=RANDOM_SAMPLING, desc="Build Progress..")
 
-    while len(selected_mutants) < RANDOM_SAMPLING+1:
+    while len(selected_mutants) < RANDOM_SAMPLING:
         # prevent infinite loop if we ran our of non-trivial compile-able mutant samples
         if len(mutation_list) == 0:
             break
@@ -83,7 +83,7 @@ def rewrite_functions(infile, logger=logging.Logger("null"), context=None, fname
             # we dont wanna iterate over the failed ones again
             f += 1
             mutation_list.remove(m)
-        pbar.update(len(selected_mutants)/10)
+        pbar.update(len(selected_mutants)//10)
     pbar.close()
 
     logger.info("------------[ Statistics ]------------")
