@@ -47,7 +47,7 @@ cd ..
 
 # install gtirb-capstone
 cd gtirb-capstone
-pip install wheel ipython ipdb
+pip install wheel ipython ipdb tqdm
 pip install .
 cd ..
 
