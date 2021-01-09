@@ -73,16 +73,17 @@ def rewrite_functions(infile, logger=logging.Logger("null"), context=None, fname
             continue
         pbar.set_description_str(f'Current mutation: {str(m)}')
         if m.build(ctx, logger):
-            i +=1
+            #i +=1
             selected_mutants.append(str(m))
             # prevent duplication of mutants in list
             mutation_list.remove(m)
-            if not i%10:
-                pbar.update(i)
+            #if not i%10:
+            #    pbar.update(i)
         else:
             # we dont wanna iterate over the failed ones again
             f += 1
             mutation_list.remove(m)
+        pbar.update(len(selected_mutants)/10)
     pbar.close()
 
     logger.info("------------[ Statistics ]------------")
@@ -195,7 +196,7 @@ def trivial_test(filename:str, timeout=2) -> bool:
     for arg in args:
         cmd = [filename, arg]
         # success run output
-        proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
+        proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
         try:
             _, stderr = proc.communicate(input=b'\n\n', timeout=timeout)
         except subprocess.TimeoutExpired:
@@ -205,6 +206,7 @@ def trivial_test(filename:str, timeout=2) -> bool:
             if proc.returncode - 128 == signal.SIGSEGV:
                 status = False
                 break
+        proc.kill()
     return status
 
 def save_ir(ctx, fname, logger=logging.Logger("null")):
