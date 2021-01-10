@@ -20,6 +20,8 @@ import random
 import argparse
 import logging
 import subprocess
+
+from multiprocessing import Pool, Manager, Process
 from gtirb_functions import Function
 from gtirb_capstone import RewritingContext
 from gtirb_capstone.instructions import GtirbInstructionDecoder
@@ -29,9 +31,46 @@ from colorama import Fore
 from capstone import *
 from capstone.x86 import *
 
-def rewrite_functions(infile, logger=logging.Logger("null"), context=None, fname=None):
-    #logger.info("Generating GTIRB IR...")
-    #gtirb_protobuf(infile)
+manager = Manager()
+mutation_list = manager.list()
+
+def driver(infile, logger=logging.Logger("null"), context=None, fname=None):
+    logger.info("Loading IR... " + infile)
+    ir = IR.load_protobuf(infile)
+
+    logger.info("Preparing IR for rewriting...")
+    ctx = RewritingContext(ir) if context is None else context
+
+    ctx.cp.detail = True
+
+    CPU_COUNT = 4
+
+    for m in ctx.ir.modules:
+        functions = Function.build_functions(m)
+        total_fn = len(functions)
+        print("%d functions in binary" % total_fn)
+
+        div = total_fn//CPU_COUNT
+        num_proc = div if total_fn%CPU_COUNT == 0 else div+1
+
+        proc_list = []
+        
+        #import ipdb; ipdb.set_trace()
+
+        for i in range(CPU_COUNT):
+            try:
+                fn_list = list(map(lambda f: f.get_name(), functions[i*num_proc: i*num_proc + num_proc]))
+            except IndexError:
+                fn_list = list(map(lambda f: f.get_name(), functions[i*num_proc:]))
+            proc = Process(target=rewrite_functions, args=(infile, fn_list, logger, ))
+            proc_list.append(proc)
+            proc.start()
+        #import ipdb; ipdb.set_trace()
+        for p in proc_list:
+            p.join()
+ 
+ 
+def rewrite_functions(infile, func_list, logger=logging.Logger("null"), context=None, fname=None):
     logger.info("Loading IR... " + infile)
     ir = IR.load_protobuf(infile)
 
@@ -42,13 +81,20 @@ def rewrite_functions(infile, logger=logging.Logger("null"), context=None, fname
 
     for m in ctx.ir.modules:
         functions = Function.build_functions(m)
-        print("%d functions in binary" % (len(functions)))
-        bar = tqdm(functions, desc="Loop over functions", bar_format="{l_bar}%s{bar}%s{r_bar}" % (Fore.YELLOW, Fore.RESET))
+        total_fn = len(functions)
+        print("%d functions in binary" % total_fn)
+
+        filter_func = []
+
+        for f in functions:
+            if f.get_name() in func_list:
+                filter_func.append(f) 
+
+        bar = tqdm(filter_func, desc="Loop over functions", bar_format="{l_bar}%s{bar}%s{r_bar}" % (Fore.YELLOW, Fore.RESET))
         for f in bar:
             bar.set_description_str(f'Current function: {f.get_name()}')
-            if fname == None or fname == f.get_name():
-                rewrite_function(m, f, ctx, logger=logger)
-    
+            rewrite_function(m, f, ctx, logger=logger)
+            
     total_mutations = len(mutation_list)
     logger.info("#%s unique mutantion patterns found..."%str(total_mutations))
     print("#%s unique mutantion patterns found..."%str(total_mutations))
@@ -197,11 +243,13 @@ def trivial_test(filename:str, timeout=2) -> bool:
         try:
             _, stderr = proc.communicate(input=b'\n\n', timeout=timeout)
         except subprocess.TimeoutExpired:
+            proc.kill()
             return False
         if stderr:
             # in case of error
             if proc.returncode - 128 == signal.SIGSEGV:
                 status = False
+                proc.kill()
                 break
         proc.kill()
     return status
@@ -282,6 +330,9 @@ class Instruction(object):
     def insn_sz(self):
         return self._insn_sz
 
+    def __reduce__(self):
+        return (self.__class__, (self._insn_str, self._encoding, self._insn_sz, ))
+
 class Mutation(object):
     def __init__(self, mname, fname, block, insn, offset, category, instruction):
         self._mname = mname
@@ -326,6 +377,22 @@ class Mutation(object):
     
     def __str__(self):
         return gen_name(self._mname, self._fname, self._cat, self._offset, self._insn.mnemonic, self._repl.insn_str)
+
+    def __getstate__(self):
+        print("pickled!")
+        return self.__dict__
+    
+    def __setstate__(self, state):
+        self._mname = state['mname']
+        self._fname = state['fname']
+        self._block = state['block']
+        self._insn = state['insn']
+        self._offset = state['offset']
+        self._cat = state['cat']
+        self._repl = state['repl']
+
+    #def __reduce__(self):
+    #    return (self.__class__, (self._mname, self._fname, self._block, self._insn, self._offset, self._cat, self._repl, ))
     
 
 def build_mutation(block, ctx, insn, offset, group_name, fname, encoding, count, repl, logger=logging.Logger("null")):
@@ -369,8 +436,6 @@ def build_mutation(block, ctx, insn, offset, group_name, fname, encoding, count,
     
     return True
 
-mutation_list = []
-
 def mutation(block, ctx, insn, offset, group_name, fname, group=None, logger=logging.Logger("null")):
     if group is not None:
         for i in group.keys():
@@ -409,6 +474,7 @@ def mutation(block, ctx, insn, offset, group_name, fname, group=None, logger=log
             logger.info("\nReplacing %s with %s"% (str(insn), asm))
             instruction = Instruction('nop', encoding, count)
             m = Mutation(ctx.ir.modules[0].name, fname, block, insn, offset, group_name, instruction)
+            
             mutation_list.append(m)
             #build_mutation(block, ctx, insn, offset, group_name, fname, encoding, count, "nop", logger=logger)
         # handle jump case only - taken branch
@@ -565,7 +631,7 @@ def main():
 
     logger.info("Rewriting stuff...")
 
-    rewrite_functions(args.infile, logger=logger, fname=args.fname)
+    driver(args.infile, logger=logger, fname=args.fname)
 
     return 0
 
