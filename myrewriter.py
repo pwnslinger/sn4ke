@@ -14,6 +14,7 @@ import random
 import os
 import re
 import copy
+import glob
 import logging
 import signal
 import random
@@ -29,7 +30,19 @@ from colorama import Fore
 from capstone import *
 from capstone.x86 import *
 
+j = 0
+f = 0
+
+def count(infile):
+    bin_name = '.'.join(os.path.basename(infile).split('.')[:2])
+    bin_dir = './results/%s/bin'%bin_name
+    if os.path.exists(bin_dir):
+        return len(glob.glob(bin_dir+'/*'))
+    else:
+        return 0
+
 def rewrite_functions(infile, logger=logging.Logger("null"), context=None, fname=None):
+    global j
     #logger.info("Generating GTIRB IR...")
     #gtirb_protobuf(infile)
     logger.info("Loading IR... " + infile)
@@ -43,25 +56,16 @@ def rewrite_functions(infile, logger=logging.Logger("null"), context=None, fname
     for m in ctx.ir.modules:
         functions = Function.build_functions(m)
         print("%d functions in binary" % (len(functions)))
-        bar = tqdm(functions, desc="Loop over functions", bar_format="{l_bar}%s{bar}%s{r_bar}" % (Fore.YELLOW, Fore.RESET))
-        for f in bar:
-            bar.set_description_str(f'Current function: {f.get_name()}')
-            if fname == None or fname == f.get_name():
-                rewrite_function(m, f, ctx, logger=logger)
+
+        #bar = tqdm(functions, desc="Loop over functions", bar_format="{l_bar}%s{bar}%s{r_bar}" % (Fore.YELLOW, Fore.RESET))
+        while True:
+            #bar.set_description_str(f'Current function: {f.get_name()}')
+            if fname == None:
+                rewrite_function(m, random.choice(functions), ctx, logger=logger)
     
-    total_mutations = len(mutation_list)
-    logger.info("#%s unique mutantion patterns found..."%str(total_mutations))
-    print("#%s unique mutantion patterns found..."%str(total_mutations))
-    
-    f = 0
-    RANDOM_SAMPLING = 1000
+    #pbar = tqdm(total=RANDOM_SAMPLING, desc="Build Progress..", bar_format="{l_bar}%s{bar}%s{r_bar}" % (Fore.GREEN, Fore.RESET))
 
-    logger.info("Randomly selecting %s non-trivial compileable mutants..."%str(RANDOM_SAMPLING))
-
-    selected_mutants = []
-
-    pbar = tqdm(total=RANDOM_SAMPLING, desc="Build Progress..", bar_format="{l_bar}%s{bar}%s{r_bar}" % (Fore.GREEN, Fore.RESET))
-
+    '''
     while len(selected_mutants) < RANDOM_SAMPLING:
         # prevent infinite loop if we ran our of non-trivial compile-able mutant samples
         if len(mutation_list) == 0:
@@ -86,6 +90,7 @@ def rewrite_functions(infile, logger=logging.Logger("null"), context=None, fname
     logger.info("------------[ Statistics ]------------")
     logger.info("%s%% of mutants couldn't pass either compilation or trivial test."%str(round((f/total_mutations)*100, 2)))
     print("%s%% of mutants couldn't pass either compilation or trivial test."%str(round((f/total_mutations)*100, 2)))
+    '''
 
 def myshow_byteinterval_asm(ctx, byte_interval, logger=logging.Logger("null")):
     """Disassemble and print the contents of a code block."""
@@ -197,11 +202,12 @@ def trivial_test(filename:str, timeout=2) -> bool:
         try:
             _, stderr = proc.communicate(input=b'\n\n', timeout=timeout)
         except subprocess.TimeoutExpired:
-            return False
+            status = False
         if stderr:
             # in case of error
             if proc.returncode - 128 == signal.SIGSEGV:
                 status = False
+                proc.kill()
                 break
         proc.kill()
     return status
@@ -329,7 +335,7 @@ class Mutation(object):
     
 
 def build_mutation(block, ctx, insn, offset, group_name, fname, encoding, count, repl, logger=logging.Logger("null")):
-    
+    global f
     # check instruction size for overlappings, if any
     ins_sz = insn.size
 
@@ -355,6 +361,7 @@ def build_mutation(block, ctx, insn, offset, group_name, fname, encoding, count,
 
     # compile ir
     if not compile_ir(mutation_name, logger=logger):
+        f += 1
         return False
 
     # trivial test
@@ -365,68 +372,65 @@ def build_mutation(block, ctx, insn, offset, group_name, fname, encoding, count,
         logger.info('Trivial Test: Failed, filename = %s'%mutation_name)
         log(ctx.ir.modules[0].name, '%s\n'%mutation_name)
         os.unlink(bin_path)
+        f += 1
         return False
     
     return True
 
-mutation_list = []
-
 def mutation(block, ctx, insn, offset, group_name, fname, group=None, logger=logging.Logger("null")):
-    if group is not None:
-        for i in group.keys():
-            if insn.id == i:
-                continue
+    global j
+    while True:
+        t_mutation = random.randint(1, 3)
+        if group is not None:
+            for i in group.keys():
+                if insn.id == i:
+                    continue
 
-            # mutate asm based on the group it belongs to
-            asm = mutate_asm(i, insn)
+                # mutate asm based on the group it belongs to
+                asm = mutate_asm(i, insn)
 
-            # convert to byte using keystone
-            # encoding, count = ctx.ks.asm(asm)
-            (encoding, count), err = ks_wrapper(asm)
+                # convert to byte using keystone
+                # encoding, count = ctx.ks.asm(asm)
+                (encoding, count), err = ks_wrapper(asm)
 
-            if err:
-                continue
+                if err:
+                    continue
 
-            if encoding is None:
-                logger.debug("\nCouldn't handle %s"%group[i])
-                continue
+                if encoding is None:
+                    logger.debug("\nCouldn't handle %s"%group[i])
+                    continue
 
-            logger.info("\nReplacing %s with %s"% (str(insn), asm))
-            instruction = Instruction(group[i], encoding, count)
-            m = Mutation(ctx.ir.modules[0].name, fname, block, insn, offset, group_name, instruction)
-            mutation_list.append(m)
-            #build_mutation(block, ctx, insn, offset, group_name, fname, encoding, count, group[i], logger=logger)
-    else:
-        # handle nop cases : skip instruction
-        if group_name == "nopOp":
-            asm = mutate_asm(X86_INS_NOP, insn)
+                logger.info("\nReplacing %s with %s"% (str(insn), asm))
+                if build_mutation(block, ctx, insn, offset, group_name, fname, encoding, count, group[i], logger=logger):
+                    break
+        else:
+            # handle nop cases : skip instruction
+            if group_name == "nopOp":
+                asm = mutate_asm(X86_INS_NOP, insn)
 
-            (encoding, count), err = ks_wrapper(asm)
+                (encoding, count), err = ks_wrapper(asm)
 
-            if err:
-                return
+                if err:
+                    return
 
-            logger.info("\nReplacing %s with %s"% (str(insn), asm))
-            instruction = Instruction('nop', encoding, count)
-            m = Mutation(ctx.ir.modules[0].name, fname, block, insn, offset, group_name, instruction)
-            mutation_list.append(m)
-            #build_mutation(block, ctx, insn, offset, group_name, fname, encoding, count, "nop", logger=logger)
-        # handle jump case only - taken branch
-        elif group_name == "brOp":
-            if insn.id == X86_INS_JMP:
-                return
-            asm = mutate_asm(X86_INS_JMP, insn)
+                logger.info("\nReplacing %s with %s"% (str(insn), asm))
+                if build_mutation(block, ctx, insn, offset, group_name, fname, encoding, count, "nop", logger=logger):
+                    break
+            # handle jump case only - taken branch
+            elif group_name == "brOp":
+                if insn.id == X86_INS_JMP:
+                    return
+                asm = mutate_asm(X86_INS_JMP, insn)
 
-            (encoding, count), err = ks_wrapper(asm)
+                (encoding, count), err = ks_wrapper(asm)
 
-            if err:
-                return
+                if err:
+                    return
 
-            logger.info("\nReplacing %s with %s"% (str(insn), asm))
-            instruction = Instruction('jmp', encoding, count)
-            m = Mutation(ctx.ir.modules[0].name, fname, block, insn, offset, group_name, instruction)
-            mutation_list.append(m)
-            #build_mutation(block, ctx, insn, offset, group_name, fname, encoding, count, "jmp", logger=logger)
+                logger.info("\nReplacing %s with %s"% (str(insn), asm))
+                if build_mutation(block, ctx, insn, offset, group_name, fname, encoding, count, "jmp", logger=logger):
+                    break
+        break
 
 def gtirb_protobuf(filename):
     disasm_args = ['ddisasm',
@@ -438,17 +442,25 @@ def gtirb_protobuf(filename):
     return subprocess.call(disasm_args)
 
 def rewrite_function(module, func, ctx, logger=logging.Logger("null")):
+    global j
     logger.info("\nRewriting function: %s" % func.get_name())
 
     blocks = func.get_all_blocks()
     fname = func.get_name()
+    t = random.randint(1, 20)
 
-    for b in blocks:
+    while True:
+        b = random.choice(list(blocks))
+
         bytes = b.byte_interval.contents[b.offset : b.offset + b.size]
         offset = 0
 
+        t_insn = random.randint(1, 10)
+
         #for i in ctx.cp.disasm(bytes, offset):
-        for i in tuple(GtirbInstructionDecoder(module.isa).get_instructions(b)):
+        while True:
+            i = random.choice(tuple(GtirbInstructionDecoder(module.isa).get_instructions(b)))
+
             # mutation on jump instructions 
             if i.group(CS_GRP_JUMP):
                 #if i.id in insn_branch.keys():
@@ -504,10 +516,8 @@ def rewrite_function(module, func, ctx, logger=logging.Logger("null")):
                             continue
                         
                         logger.info("\nReplacing %s with %s"% (str(i), asm))
-                        instruction = Instruction('imm:%s'%const, encoding, count)
-                        m = Mutation(module.name, fname, b, i, offset, 'constOp', instruction)
-                        mutation_list.append(m)
-                        #build_mutation(b, ctx, i, offset, "constOp", fname, encoding, count, 'imm:%s'%const, logger=logger)
+                        if build_mutation(b, ctx, i, offset, "constOp", fname, encoding, count, 'imm:%s'%const, logger=logger):
+                            j += 1
                         
             if i.id in insn_logic.keys():
                 # swapping operators
@@ -524,6 +534,8 @@ def rewrite_function(module, func, ctx, logger=logging.Logger("null")):
                 mutation(b, ctx, i, offset, "nopOp", fname, logger=logger)
 
             offset += i.size
+            break
+        break
 
 def main():
     ap = argparse.ArgumentParser(
