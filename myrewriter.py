@@ -192,17 +192,25 @@ def trivial_test(filename:str, timeout=2) -> bool:
     
     for arg in args:
         cmd = [filename, arg]
-        # success run output
-        proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+        # success run output - preexec_fn is not thread safe, use set_new_session=True instead!
+        #proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE, stdout=subprocess.PIPE, shell=True, preexec=os.setsid)
+        proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE, stdout=subprocess.PIPE, shell=True, start_new_session=True)
         try:
             _, stderr = proc.communicate(input=b'\n\n', timeout=timeout)
+            # check if process is still running!
+            if proc.poll() is None:
+                # kill group of orphan processes under shell session ID - get rid of orphan processes livin' around and 100% cpu!
+                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            #import ipdb; ipdb.set_trace()
         except subprocess.TimeoutExpired:
             return False
         if stderr:
             # in case of error
             if proc.returncode - 128 == signal.SIGSEGV:
                 status = False
+                proc.kill()
                 break
+        subprocess.call(['pkill', '-9', '-f', filename])
         proc.kill()
     return status
 
