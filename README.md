@@ -13,6 +13,8 @@ and install it effectively:
 
 `python setup.py install` 
 
+For detailed instructions on how to run and interact with gtirb-based mutation engine, please take a look at [Rewriter](./REWRITE.md) doc.  
+
 ## Test 
 
 The following pass simply duplicates the any jump group of instructions using

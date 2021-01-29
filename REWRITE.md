@@ -93,8 +93,32 @@ Compiler arguments: -o test /tmp/fileQtPVZl.s -lm -nostartfiles -pie
 
 You should put these adjustments under [./myrewriter.py#compile_ir](./myrewriter.py#L184-L194) function. 
 
-
 # Transfer files
 To transfer mutations from server to your local use the following command:  
 `scp -r mohsen@cips.dyndns.org:~/sn4ke/results/lbm_base.amd64-m64-gcc42-nn .`  
 
+# Bug Reports 
+During our research we reported the following issues to Grammatech to help us with. 
+
+1. There was a segmentation fault received on bzip2 binary. Issue happened when we tried to reassemble the GTIRB representation back to an executable. We reported the issue and the problem is related to the remaining .ctors and .dtors sections, which seems to conflict with the ones added by the linker. Here is the link:  [issue #3: re-compilation error on bzip2](https://github.com/GrammaTech/gtirb-pprinter/issues/3)  
+
+# Tips on running the experiments  
+In some rare cases, mutated binary creates a series of fork processes and filled up the CPU on our clusters. One remediation is to check for CPU and memory utilization during benchspec run to keep usage under a certain threshold. While we extended the disk space to 1TB on each cluster, on EC2 servers, swap partition took a lot of space to make sure server can stay up and functional. This race continues until server reaches a state in which the whole disk space has been used up. To prevent this we suggest the following:  
+
+1. After each successful experiment, clean-up the `benchspec/CPU2006/*/run/*` directory. These files are not needed for the next run and dumped here from the previous run.  
+2. Kill orphan childs of infinite looped processes or forked ones, because these processes eat up a lot of memory and increase paging.  For example, we want to kill orphan processes of `milc` binary:  
+    ```bash
+        $ df -h
+            Filesystem      Size  Used Avail Use% Mounted on
+            udev             30G     0   30G   0% /dev
+            tmpfs           5.9G  920K  5.9G   1% /run
+            /dev/xvda1      970G  579G  391G  60% /
+            tmpfs            30G     0   30G   0% /dev/shm
+        $ pkill -9 -f milc
+        $ df -h
+            Filesystem      Size  Used Avail Use% Mounted on
+            udev             30G     0   30G   0% /dev
+            tmpfs           5.9G  920K  5.9G   1% /run
+            /dev/xvda1      970G  195G  776G  21% /
+            tmpfs            30G     0   30G   0% /dev/shm
+    ```  
