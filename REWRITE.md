@@ -122,3 +122,9 @@ In some rare cases, mutated binary creates a series of fork processes and filled
             /dev/xvda1      970G  195G  776G  21% /
             tmpfs            30G     0   30G   0% /dev/shm
     ```  
+    To perform this task automatically, we created a service to kill processes under certain names, `PROC`, with a lifespan more than a `THRESHOLD` seconds.  
+    ```bash
+    PROC=$1
+    THRESHOLD=$2
+    for p in $(ps -eo comm,pid,etimes | awk '/^PROC/ {if ($3 > THRESHOLD) {print $2}}'); do kill -9 $p; done
+    ```  
