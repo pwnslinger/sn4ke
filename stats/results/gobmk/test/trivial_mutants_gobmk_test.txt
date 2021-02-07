@@ -1,0 +1,2 @@
+/export/scratch2/navid/Binary_mutation2/mutants/gobmk/gobmk_base.amd64-m64-gcc42-nn:gtp_main_loop:constOp:0:add:imm:-9
+/export/scratch2/navid/Binary_mutation2/mutants/gobmk/gobmk_base.amd64-m64-gcc42-nn:clear_board:arithOp:4:shr:rol

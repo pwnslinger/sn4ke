@@ -1,0 +1,11 @@
+/export/scratch2/navid/binary_mutation2/mutants/perlbench/perlbench_base.amd64-m64-gcc42-nn:Perl_newHV:logicOp:17:and:xor
+/export/scratch2/navid/binary_mutation2/mutants/perlbench/perlbench_base.amd64-m64-gcc42-nn:Perl_keyword:constOp:4:add:imm:12
+/export/scratch2/navid/binary_mutation2/mutants/perlbench/perlbench_base.amd64-m64-gcc42-nn:perl_run:nopOp:30:je:nop
+/export/scratch2/navid/binary_mutation2/mutants/perlbench/perlbench_base.amd64-m64-gcc42-nn:Perl_pp_padsv:brOp:30:je:jmp
+/export/scratch2/navid/binary_mutation2/mutants/perlbench/perlbench_base.amd64-m64-gcc42-nn:Perl_append_elem:nopOp:0:jmp:nop
+/export/scratch2/navid/binary_mutation2/mutants/perlbench/perlbench_base.amd64-m64-gcc42-nn:S_hv_fetch_common:arithOp:12:shl:ror
+/export/scratch2/navid/binary_mutation2/mutants/perlbench/perlbench_base.amd64-m64-gcc42-nn:Perl_gv_fetchpv:nopOp:12:jne:nop
+/export/scratch2/navid/binary_mutation2/mutants/perlbench/perlbench_base.amd64-m64-gcc42-nn:Perl_yyparse:constOp:22:add:imm:6
+/export/scratch2/navid/binary_mutation2/mutants/perlbench/perlbench_base.amd64-m64-gcc42-nn:Perl_peep:brOp:3:je:jmp
+/export/scratch2/navid/binary_mutation2/mutants/perlbench/perlbench_base.amd64-m64-gcc42-nn:Perl_hv_ksplit:arithOp:7:sub:add
+/export/scratch2/navid/binary_mutation2/mutants/perlbench/perlbench_base.amd64-m64-gcc42-nn:S_parse_body:arithOp:7:add:ror

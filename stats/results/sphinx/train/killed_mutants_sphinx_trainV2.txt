@@ -1,0 +1,1 @@
+/home/ubuntu/mutation/mutants/results_ddisasm/sphinx_livepretend_base.amd64-m64-gcc42-nn/bin//sphinx_livepretend_base.amd64-m64-gcc42-nn:cmd_ln_parse:logicOp:32:xor:or

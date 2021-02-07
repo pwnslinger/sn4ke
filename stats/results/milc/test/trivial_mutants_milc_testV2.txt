@@ -1,0 +1,1 @@
+/home/ubuntu/mutation/mutants/results_ddisasm/milc_base.amd64-m64-gcc42-nn/bin//milc_base.amd64-m64-gcc42-nn:sort_eight_special:arithOp:8:add:shl
