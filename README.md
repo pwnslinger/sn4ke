@@ -1,5 +1,6 @@
-# sn4ke
-binary mutator
+# sn4ke  
+[![DOI](https://zenodo.org/badge/278747355.svg)](https://zenodo.org/badge/latestdoi/278747355)  
+Binary mutation engine based in [ddisasm](https://github.com/GrammaTech/ddisasm) and [Rev.ng](https://github.com/revng/revng). 
 
 ## Gtirb-capstone 
 I modified the baseline Gtirb-capstone module to support capstone in the
