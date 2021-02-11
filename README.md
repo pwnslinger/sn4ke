@@ -1,8 +1,14 @@
 # sn4ke  
 [![DOI](https://zenodo.org/badge/278747355.svg)](https://zenodo.org/badge/latestdoi/278747355)  
-Binary mutation engine based in [ddisasm](https://github.com/GrammaTech/ddisasm) and [Rev.ng](https://github.com/revng/revng). 
+Binary mutation engine based on [ddisasm](https://github.com/GrammaTech/ddisasm) and [Rev.ng](https://github.com/revng/revng) with a massive set of source-level muatation operators. 
 
-## Gtirb-capstone 
+## REWRITING  
+To get more insight on our rewriting engine and mutations please take a look at [REWRITE.md](./REWRITE.md).  
+
+## Expetiment results  
+You can get access to our expetiment results and mutation breakdown through [this](https://docs.google.com/spreadsheets/d/11-Dt99bzEwhrv9GtTNtObHdDoniOTLmQ3BMDW8RMwzc/edit?usp=sharing) link. Just in case the above URL was not valid anymore, you can find the results under [results.xlsx](./stats/results.xlsx).
+
+### Gtirb-capstone 
 I modified the baseline Gtirb-capstone module to support capstone in the
 context. This is a patch for the master branch and will be merged later on. 
 
