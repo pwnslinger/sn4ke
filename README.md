@@ -1,4 +1,4 @@
-# sn4ke  
+# SN4KE  
 [![DOI](https://zenodo.org/badge/278747355.svg)](https://zenodo.org/badge/latestdoi/278747355)  
 Binary mutation engine based on [ddisasm](https://github.com/GrammaTech/ddisasm) and [Rev.ng](https://github.com/revng/revng) with a massive set of source-level muatation operators. 
 
@@ -8,7 +8,21 @@ To get more insight on our rewriting engine and mutations please take a look at 
 ## Expetiment results  
 You can get access to our expetiment results and mutation breakdown through [this](https://docs.google.com/spreadsheets/d/11-Dt99bzEwhrv9GtTNtObHdDoniOTLmQ3BMDW8RMwzc/edit?usp=sharing) link. Just in case the above URL was not valid anymore, you can find the results under [results.xlsx](./stats/results.xlsx).
 
-### Gtirb-capstone 
+## Citing SN4KE  
+SN4KE has been accepted to the [Binary Analysis Research (BAR)](https://www.ndss-symposium.org/ndss2021/cfp-bar-workshop/) workshop co-located with NDSS'21. If you want to refer to our work, please use the following BibTeX for citation.  
+
+```
+@misc{ahmadi2021sn4ke,
+    title={SN4KE: Practical Mutation Testing at Binary Level},
+    author={Mohsen Ahmadi and Pantea Kiaei and Navid Emamdoost},
+    year={2021},
+    eprint={2102.05709},
+    archivePrefix={arXiv},
+    primaryClass={cs.SE}
+}
+```  
+
+## Gtirb-capstone 
 I modified the baseline Gtirb-capstone module to support capstone in the
 context. This is a patch for the master branch and will be merged later on. 
 
